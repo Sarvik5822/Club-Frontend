@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,8 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Loader2, Dumbbell, CheckCircle, Upload, Waves, Swords, Trophy, Weight, Target } from 'lucide-react';
+import { Loader2, Dumbbell, CheckCircle, Upload, Waves, Swords, Trophy, Weight, Target, Building, MapPin } from 'lucide-react';
+import authService from '@/services/authService';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -19,6 +20,8 @@ export default function Register() {
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState('');
   const [uploadedImage, setUploadedImage] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [branchesLoading, setBranchesLoading] = useState(true);
   const [formData, setFormData] = useState({
     // Basic Personal Details
     name: '',
@@ -30,6 +33,7 @@ export default function Register() {
     avatar: '',
     password: '',
     confirmPassword: '',
+    branchId: '',
     
     // Emergency Contact
     emergencyContactName: '',
@@ -64,6 +68,24 @@ export default function Register() {
     
     agreeToTerms: false,
   });
+
+  // Fetch branches on mount
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        setBranchesLoading(true);
+        const data = await authService.getPublicBranches();
+        if (data.status === 'success') {
+          setBranches(data.data.branches || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch branches:', error);
+      } finally {
+        setBranchesLoading(false);
+      }
+    };
+    fetchBranches();
+  }, []);
 
   const avatarOptions = [
     'https://api.dicebear.com/7.x/avataaars/svg?seed=John',
@@ -182,6 +204,10 @@ export default function Register() {
           toast.error('Please fill in all required fields in Basic Personal Details');
           return false;
         }
+        if (!formData.branchId) {
+          toast.error('Please select a Club/Branch to register with');
+          return false;
+        }
         if (formData.password !== formData.confirmPassword) {
           toast.error('Passwords do not match');
           return false;
@@ -256,13 +282,43 @@ export default function Register() {
 
     setLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      toast.success('Registration successful! Please login to continue.');
+    try {
+      // Build the registration payload
+      const payload = {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        phone: formData.mobileNumber,
+        branchId: formData.branchId,
+        address: formData.address,
+        avatar: formData.avatar || undefined,
+        dob: formData.dob,
+        gender: formData.gender,
+        selectedSports: formData.selectedSports,
+        fitnessLevel: formData.fitnessLevel,
+        emergencyContact: {
+          name: formData.emergencyContactName,
+          phone: formData.emergencyContactNumber,
+          relationship: formData.emergencyRelation,
+        },
+        healthInfo: {
+          allergies: formData.allergies === 'yes' ? [formData.allergyDetails] : [],
+          medicalConditions: formData.chronicIllness === 'yes' ? [formData.chronicIllnessDetails] : [],
+        },
+      };
+
+      await authService.register(payload);
+
+      toast.success('Registration successful! Your account is pending approval by the club admin. You will be able to login once approved.');
       navigate('/login');
-    }, 2000);
+    } catch (error) {
+      toast.error(error.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const selectedBranch = branches.find(b => b._id === formData.branchId);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 to-green-50 dark:from-gray-950 dark:to-gray-900 p-4 py-8">
@@ -319,6 +375,71 @@ export default function Register() {
                   <Button type="button" variant="outline" onClick={handleChangeAvatar}>
                     Change Avatar
                   </Button>
+                </div>
+
+                {/* Branch/Club Selection - NEW */}
+                <div className="space-y-2">
+                  <Label htmlFor="branchId" className="flex items-center gap-2">
+                    <Building className="h-4 w-4 text-emerald-600" />
+                    Select Club/Branch *
+                  </Label>
+                  {branchesLoading ? (
+                    <div className="flex items-center gap-2 p-3 border rounded-md">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm text-muted-foreground">Loading clubs...</span>
+                    </div>
+                  ) : branches.length === 0 ? (
+                    <div className="p-3 border rounded-md bg-yellow-50 dark:bg-yellow-900/20">
+                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                        No clubs available at the moment. Please contact support.
+                      </p>
+                    </div>
+                  ) : (
+                    <Select
+                      value={formData.branchId}
+                      onValueChange={(value) => setFormData({ ...formData, branchId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose your club/branch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {branches.map((branch) => (
+                          <SelectItem key={branch._id} value={branch._id}>
+                            <div className="flex items-center gap-2">
+                              <Building className="h-4 w-4 text-emerald-600" />
+                              <span>{branch.name}</span>
+                              <span className="text-xs text-muted-foreground">({branch.code})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {selectedBranch && (
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                      <div className="flex items-start gap-2">
+                        <MapPin className="h-4 w-4 text-emerald-600 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">{selectedBranch.name}</p>
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                            {selectedBranch.address}{selectedBranch.city ? `, ${selectedBranch.city}` : ''}
+                          </p>
+                          {selectedBranch.sportsOffered && selectedBranch.sportsOffered.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {selectedBranch.sportsOffered.map((sport, idx) => (
+                                <span key={idx} className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-800 text-emerald-700 dark:text-emerald-200 rounded-full text-xs">
+                                  {sport}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Your registration will be reviewed by the selected club&apos;s admin. You can join other clubs later from your dashboard.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

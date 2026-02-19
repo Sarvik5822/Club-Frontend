@@ -1,22 +1,9 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { api } from '@/lib/api';
 
 export const authService = {
   // Login
   login: async (email, password, role) => {
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: 'Login failed' }));
-      throw new Error(error.message || 'Login failed');
-    }
-
-    const data = await response.json();
+    const data = await api.post('/auth/login', { email, password });
     
     // Store token in localStorage immediately after successful login
     if (data.status === 'success' && data.data.token) {
@@ -24,6 +11,16 @@ export const authService = {
     }
     
     return data;
+  },
+
+  // Register
+  register: async (payload) => {
+    return api.post('/auth/register', payload);
+  },
+
+  // Get public branches (for registration)
+  getPublicBranches: async () => {
+    return api.get('/auth/branches');
   },
 
   // Logout
@@ -51,19 +48,7 @@ export const authService = {
 
   // Refresh token
   refreshToken: async (refreshToken) => {
-    const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ refreshToken }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Token refresh failed');
-    }
-
-    const data = await response.json();
+    const data = await api.post('/auth/refresh-token', { refreshToken });
 
     // Update token in localStorage if new token is provided
     if (data.token) {

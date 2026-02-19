@@ -472,6 +472,20 @@ const adminService = {
     return api.delete(`/admin/trainingPlanRoutes/deleteTrainingPlan/${id}`);
   },
 
+  // ==================== Club Join Request Management ====================
+  getJoinRequests: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/admin/clubJoinRoutes/getAllJoinRequests${queryString ? `?${queryString}` : ''}`);
+  },
+
+  approveJoinRequest: async (id) => {
+    return api.put(`/admin/clubJoinRoutes/approveJoinRequest/${id}`);
+  },
+
+  rejectJoinRequest: async (id, data) => {
+    return api.put(`/admin/clubJoinRoutes/rejectJoinRequest/${id}`, data);
+  },
+
   // ==================== Membership Plan Management ====================
   getMembershipPlans: async (params = {}) => {
     const queryString = new URLSearchParams(params).toString();

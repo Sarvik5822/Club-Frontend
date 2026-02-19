@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Edit, Ban, CheckCircle, Clock, MapPin, Calendar } from 'lucide-react';
+import { ArrowLeft, Edit, Ban, CheckCircle, Clock, MapPin, Calendar, User } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import adminService from '@/services/adminService';
@@ -18,9 +22,24 @@ export default function MemberDetail() {
   const [healthInfo, setHealthInfo] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Edit modal state
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
+  const [coaches, setCoaches] = useState([]);
+
+  const fetchCoaches = useCallback(async () => {
+    try {
+      const response = await adminService.getCoaches({ limit: 100 });
+      setCoaches(response.data.coaches || []);
+    } catch (error) {
+      console.error('Failed to fetch coaches:', error);
+    }
+  }, []);
+
   useEffect(() => {
     fetchMemberDetails();
-  }, [id]);
+    fetchCoaches();
+  }, [id, fetchCoaches]);
 
   const fetchMemberDetails = async () => {
     try {
@@ -35,7 +54,8 @@ export default function MemberDetail() {
         const attendanceRes = await adminService.getAttendance({ memberId: id });
         setAttendance(attendanceRes.data.records || []);
       } catch (e) {
-        console.error('Failed to fetch attendance:', e);
+        // Silently handle - attendance may not exist yet
+        setAttendance([]);
       }
 
       // Fetch member's payments
@@ -43,15 +63,17 @@ export default function MemberDetail() {
         const paymentsRes = await adminService.getPayments({ memberId: id });
         setPayments(paymentsRes.data.payments || []);
       } catch (e) {
-        console.error('Failed to fetch payments:', e);
+        // Silently handle - payments may not exist yet
+        setPayments([]);
       }
 
-      // Fetch health records
+      // Fetch health records - gracefully handle 404 (no record exists yet)
       try {
         const healthRes = await adminService.getHealthRecordByMemberId(id);
         setHealthInfo(healthRes.data);
       } catch (e) {
-        console.error('Failed to fetch health info:', e);
+        // Health record not found is expected for members without health data
+        setHealthInfo(null);
       }
 
     } catch (error) {
@@ -62,6 +84,46 @@ export default function MemberDetail() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenEditModal = () => {
+    setEditingMember({ ...member });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateMember = async () => {
+    try {
+      const memberData = { ...editingMember };
+      const selectedCoachId = memberData.coachId?._id || memberData.coachId;
+
+      // Remove coachId from the main update payload (handle separately)
+      delete memberData.coachId;
+
+      // Update member basic info
+      await adminService.updateMember(editingMember._id, memberData);
+
+      // Handle coach assignment separately
+      if (selectedCoachId && selectedCoachId !== 'none') {
+        await adminService.assignCoachToMember(selectedCoachId, { memberId: editingMember._id });
+      } else {
+        // Remove coach by updating member with null coachId
+        await adminService.updateMember(editingMember._id, { coachId: null });
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Member updated successfully',
+      });
+      setShowEditModal(false);
+      setEditingMember(null);
+      fetchMemberDetails();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update member',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -152,7 +214,7 @@ export default function MemberDetail() {
           <p className="text-muted-foreground mt-1">View and edit member information</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate(`/admin/members/${id}/edit`)}>
+          <Button variant="outline" onClick={handleOpenEditModal}>
             <Edit className="h-4 w-4 mr-2" />
             Edit
           </Button>
@@ -206,6 +268,31 @@ export default function MemberDetail() {
                 <div>
                   <p className="text-sm text-muted-foreground">Multi-Club Access</p>
                   <p className="font-semibold">{member.multiClubAccess ? 'Yes' : 'No'}</p>
+                </div>
+              </div>
+
+              {/* Coach Info */}
+              <div className="mt-6 p-4 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full bg-primary/10">
+                    <User className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Assigned Coach</p>
+                    {member.coachId ? (
+                      <div>
+                        <p className="font-semibold">{member.coachId.name}</p>
+                        {member.coachId.email && (
+                          <p className="text-sm text-muted-foreground">{member.coachId.email}</p>
+                        )}
+                        {member.coachId.specialization && (
+                          <p className="text-xs text-muted-foreground mt-0.5">Specialization: {member.coachId.specialization}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="font-semibold text-muted-foreground italic">No coach assigned</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -447,6 +534,121 @@ export default function MemberDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Member Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Member</DialogTitle>
+          </DialogHeader>
+          {editingMember && (
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Full Name</Label>
+                  <Input
+                    value={editingMember.name || ''}
+                    onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={editingMember.email || ''}
+                    onChange={(e) => setEditingMember({ ...editingMember, email: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input
+                    type="tel"
+                    value={editingMember.phone || ''}
+                    onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editingMember.status}
+                    onValueChange={(value) => setEditingMember({ ...editingMember, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="suspended">Suspended</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Membership Type</Label>
+                  <Select
+                    value={editingMember.membershipType}
+                    onValueChange={(value) => setEditingMember({ ...editingMember, membershipType: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Basic">Basic</SelectItem>
+                      <SelectItem value="Silver">Silver</SelectItem>
+                      <SelectItem value="Gold">Gold</SelectItem>
+                      <SelectItem value="Platinum">Platinum</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Membership Expiry</Label>
+                  <Input
+                    type="date"
+                    value={editingMember.membershipExpiry?.split('T')[0] || ''}
+                    onChange={(e) => setEditingMember({ ...editingMember, membershipExpiry: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Assign Coach (Optional)</Label>
+                <Select
+                  value={editingMember.coachId?._id || editingMember.coachId || 'none'}
+                  onValueChange={(value) => {
+                    if (value === 'none') {
+                      setEditingMember({ ...editingMember, coachId: null });
+                    } else {
+                      setEditingMember({ ...editingMember, coachId: value });
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a coach (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Coach</SelectItem>
+                    {coaches.map((coach) => (
+                      <SelectItem key={coach._id} value={coach._id}>
+                        {coach.name} — {coach.specialization || 'General'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateMember}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
