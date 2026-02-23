@@ -486,6 +486,32 @@ const adminService = {
     return api.put(`/admin/clubJoinRoutes/rejectJoinRequest/${id}`, data);
   },
 
+  // ==================== Club Sports Management ====================
+  getClubSports: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    return api.get(`/admin/clubSportRoutes/getAllClubSports${queryString ? `?${queryString}` : ''}`);
+  },
+
+  createClubSport: async (data) => {
+    return api.post('/admin/clubSportRoutes/createClubSport', data);
+  },
+
+  bulkCreateClubSports: async (data) => {
+    return api.post('/admin/clubSportRoutes/bulkCreateClubSports', data);
+  },
+
+  updateClubSport: async (id, data) => {
+    return api.put(`/admin/clubSportRoutes/updateClubSport/${id}`, data);
+  },
+
+  toggleClubSportStatus: async (id) => {
+    return api.put(`/admin/clubSportRoutes/toggleClubSportStatus/${id}`);
+  },
+
+  deleteClubSport: async (id) => {
+    return api.delete(`/admin/clubSportRoutes/deleteClubSport/${id}`);
+  },
+
   // ==================== Membership Plan Management ====================
   getMembershipPlans: async (params = {}) => {
     const queryString = new URLSearchParams(params).toString();

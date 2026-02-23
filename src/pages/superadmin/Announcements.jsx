@@ -4,29 +4,35 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Bell, Calendar, User, Search, RefreshCw, ChevronLeft, ChevronRight, Paperclip } from 'lucide-react';
-import memberService from '@/services/memberService';
+import { Bell, Calendar, User, Search, RefreshCw, ChevronLeft, ChevronRight, Building2, Eye, BarChart3, Paperclip } from 'lucide-react';
+import superadminService from '@/services/superadminService';
 import { toast } from 'sonner';
 
-export default function Announcements() {
+export default function SuperadminAnnouncements() {
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [stats, setStats] = useState({ totalAnnouncements: 0, publishedAnnouncements: 0 });
   const LIMIT = 10;
 
   const fetchAnnouncements = async (currentPage = 1) => {
     try {
       setLoading(true);
-      const res = await memberService.getAnnouncements({ page: currentPage, limit: LIMIT });
+      const params = { page: currentPage, limit: LIMIT };
+      if (statusFilter !== 'all') params.status = statusFilter;
+
+      const res = await superadminService.getAnnouncements(params);
       setAnnouncements(res.data?.announcements || []);
-      setTotalPages(res.pages || 1);
-      setTotal(res.total || 0);
+      setTotalPages(res.data?.totalPages || 1);
+      setTotal(res.data?.total || 0);
     } catch (error) {
       toast.error('Failed to load announcements: ' + error.message);
     } finally {
@@ -34,17 +40,22 @@ export default function Announcements() {
     }
   };
 
+  const fetchStats = async () => {
+    try {
+      const res = await superadminService.getAnnouncementStats();
+      setStats(res.data || { totalAnnouncements: 0, publishedAnnouncements: 0 });
+    } catch (error) {
+      console.error('Failed to fetch announcement stats:', error);
+    }
+  };
+
   useEffect(() => {
     fetchAnnouncements(page);
-  }, [page]);
+    fetchStats();
+  }, [page, statusFilter]);
 
-  const handleViewDetail = async (announcement) => {
-    try {
-      const res = await memberService.getAnnouncementById(announcement._id);
-      setSelectedAnnouncement(res.data?.announcement || announcement);
-    } catch {
-      setSelectedAnnouncement(announcement);
-    }
+  const handleViewDetail = (announcement) => {
+    setSelectedAnnouncement(announcement);
     setShowDetailModal(true);
   };
 
@@ -70,7 +81,7 @@ export default function Announcements() {
     if (Array.isArray(audience)) {
       return audience.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ');
     }
-    return String(audience).charAt(0).toUpperCase() + String(audience).slice(1);
+    return audience;
   };
 
   return (
@@ -78,28 +89,74 @@ export default function Announcements() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Announcements</h1>
-          <p className="text-muted-foreground mt-1">Stay updated with the latest news and updates</p>
+          <p className="text-muted-foreground mt-1">View all announcements across all branches</p>
         </div>
-        <Button variant="outline" onClick={() => fetchAnnouncements(page)} disabled={loading}>
+        <Button variant="outline" onClick={() => { fetchAnnouncements(page); fetchStats(); }} disabled={loading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search announcements..."
-          className="pl-10"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-full">
+              <BarChart3 className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Announcements</p>
+              <p className="text-2xl font-bold">{stats.totalAnnouncements}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-full">
+              <Bell className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Published</p>
+              <p className="text-2xl font-bold">{stats.publishedAnnouncements}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-yellow-100 dark:bg-yellow-900/20 rounded-full">
+              <Eye className="h-5 w-5 text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Draft / Archived</p>
+              <p className="text-2xl font-bold">{stats.totalAnnouncements - stats.publishedAnnouncements}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {total > 0 && (
-        <p className="text-sm text-muted-foreground">{total} announcements total</p>
-      )}
+      {/* Search & Filter */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search announcements..."
+            className="pl-10"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setPage(1); }}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="archived">Archived</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Announcements List */}
       {loading ? (
@@ -128,7 +185,7 @@ export default function Announcements() {
             <Bell className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-lg font-medium">No announcements found</p>
             <p className="text-muted-foreground mt-1">
-              {searchTerm ? 'Try adjusting your search' : 'No announcements available at this time'}
+              {searchTerm ? 'Try adjusting your search' : 'No announcements available'}
             </p>
           </CardContent>
         </Card>
@@ -161,6 +218,12 @@ export default function Announcements() {
                             <Calendar className="h-3 w-3" />
                             {new Date(announcement.publishDate || announcement.createdAt).toLocaleDateString()}
                           </span>
+                          {announcement.branches && announcement.branches.length > 0 && (
+                            <span className="flex items-center gap-1">
+                              <Building2 className="h-3 w-3" />
+                              {announcement.branches.map(b => b.name || b.code || b).join(', ')}
+                            </span>
+                          )}
                           {announcement.targetAudience && (
                             <Badge variant="outline" className="text-xs">
                               {getAudienceLabel(announcement.targetAudience)}
@@ -169,32 +232,32 @@ export default function Announcements() {
                         </div>
                       </div>
                     </div>
-                    {announcement.priority && (
-                      <Badge variant={config.badge} className="capitalize flex-shrink-0">
-                        {announcement.priority}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {announcement.priority && (
+                        <Badge variant={config.badge} className="capitalize">
+                          {announcement.priority}
+                        </Badge>
+                      )}
+                      <Badge variant={
+                        announcement.status === 'published' ? 'default' :
+                          announcement.status === 'draft' ? 'secondary' :
+                            'outline'
+                      }>
+                        {announcement.status}
                       </Badge>
-                    )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <p className="text-muted-foreground line-clamp-2">{announcement.content}</p>
-
-                  {/* Show attachments count if any */}
-                  {announcement.attachments && announcement.attachments.length > 0 && (
-                    <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                      <Paperclip className="h-3 w-3" />
-                      {announcement.attachments.length} attachment{announcement.attachments.length > 1 ? 's' : ''}
-                    </div>
-                  )}
-
-                  {announcement.expiryDate && (
-                    <p className="text-xs text-muted-foreground mt-3">
-                      Valid until {new Date(announcement.expiryDate).toLocaleDateString()}
-                    </p>
-                  )}
-                  <Button variant="link" className="p-0 h-auto mt-2 text-sm">
-                    Read more →
-                  </Button>
+                  <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+                    {announcement.expiryDate && (
+                      <span>Expires: {new Date(announcement.expiryDate).toLocaleDateString()}</span>
+                    )}
+                    {announcement.viewCount > 0 && (
+                      <span>Views: {announcement.viewCount}</span>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             );
@@ -251,6 +314,12 @@ export default function Announcements() {
                     {selectedAnnouncement.priority} Priority
                   </Badge>
                 )}
+                <Badge variant={
+                  selectedAnnouncement.status === 'published' ? 'default' :
+                    selectedAnnouncement.status === 'draft' ? 'secondary' : 'outline'
+                }>
+                  {selectedAnnouncement.status}
+                </Badge>
                 {selectedAnnouncement.targetAudience && (
                   <Badge variant="outline" className="capitalize">
                     For: {getAudienceLabel(selectedAnnouncement.targetAudience)}
@@ -262,6 +331,14 @@ export default function Announcements() {
                   </Badge>
                 )}
               </div>
+
+              {selectedAnnouncement.branches && selectedAnnouncement.branches.length > 0 && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Building2 className="h-4 w-4" />
+                  <span>Branch: {selectedAnnouncement.branches.map(b => b.name || b.code || b).join(', ')}</span>
+                </div>
+              )}
+
               <p className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
                 {selectedAnnouncement.content}
               </p>
@@ -287,11 +364,17 @@ export default function Announcements() {
                 </div>
               )}
 
-              {selectedAnnouncement.expiryDate && (
-                <p className="text-sm text-muted-foreground border-t pt-3">
-                  Valid until: {new Date(selectedAnnouncement.expiryDate).toLocaleDateString()}
-                </p>
-              )}
+              <div className="border-t pt-3 space-y-1 text-sm text-muted-foreground">
+                {selectedAnnouncement.publishDate && (
+                  <p>Published: {new Date(selectedAnnouncement.publishDate).toLocaleDateString()}</p>
+                )}
+                {selectedAnnouncement.expiryDate && (
+                  <p>Expires: {new Date(selectedAnnouncement.expiryDate).toLocaleDateString()}</p>
+                )}
+                {selectedAnnouncement.viewCount > 0 && (
+                  <p>Views: {selectedAnnouncement.viewCount}</p>
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>

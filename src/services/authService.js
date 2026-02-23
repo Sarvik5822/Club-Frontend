@@ -4,12 +4,12 @@ export const authService = {
   // Login
   login: async (email, password, role) => {
     const data = await api.post('/auth/login', { email, password });
-    
+
     // Store token in localStorage immediately after successful login
     if (data.status === 'success' && data.data.token) {
       localStorage.setItem('token', data.data.token);
     }
-    
+
     return data;
   },
 
@@ -21,6 +21,16 @@ export const authService = {
   // Get public branches (for registration)
   getPublicBranches: async () => {
     return api.get('/auth/branches');
+  },
+
+  // Get active sports for a specific branch (for registration)
+  getBranchSports: async (branchId) => {
+    return api.get(`/auth/branches/${branchId}/sports`);
+  },
+
+  // Get predefined sports catalog
+  getPredefinedSports: async () => {
+    return api.get('/auth/predefined-sports');
   },
 
   // Logout

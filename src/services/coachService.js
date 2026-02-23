@@ -172,6 +172,16 @@ const coachService = {
         return api.put(`/coach/incidentRoutes/resolveIncident/${id}`, data);
     },
 
+    // ==================== Announcement Management ====================
+    getAnnouncements: async (params = {}) => {
+        const queryString = new URLSearchParams(params).toString();
+        return api.get(`/coach/announcementRoutes/getCoachAnnouncements${queryString ? `?${queryString}` : ''}`);
+    },
+
+    getAnnouncementById: async (id) => {
+        return api.get(`/coach/announcementRoutes/getAnnouncementById/${id}`);
+    },
+
     // ==================== Settings Management ====================
     getSettings: async () => {
         return api.get('/coach/settingsRoutes/getCoachSettings');

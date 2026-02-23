@@ -10,8 +10,35 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { Loader2, Dumbbell, CheckCircle, Upload, Waves, Swords, Trophy, Weight, Target, Building, MapPin } from 'lucide-react';
+import { Loader2, Dumbbell, CheckCircle, Upload, Waves, Swords, Trophy, Weight, Target, Building, MapPin, Heart, Users, Zap, Music, HelpCircle } from 'lucide-react';
 import authService from '@/services/authService';
+
+// Category icon mapping for dynamic sports
+const categoryIcons = {
+  'Aquatics': Waves,
+  'Martial Arts': Swords,
+  'Racket Sports': Trophy,
+  'Gym & Fitness': Weight,
+  'Skill & Precision': Target,
+  'Mind & Body': Heart,
+  'Team Sports': Users,
+  'Cardio': Zap,
+  'Dance': Music,
+  'Other': HelpCircle,
+};
+
+const categoryColors = {
+  'Aquatics': 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700',
+  'Martial Arts': 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700',
+  'Racket Sports': 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700',
+  'Gym & Fitness': 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700',
+  'Skill & Precision': 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700',
+  'Mind & Body': 'bg-teal-100 dark:bg-teal-900/30 border-teal-300 dark:border-teal-700',
+  'Team Sports': 'bg-indigo-100 dark:bg-indigo-900/30 border-indigo-300 dark:border-indigo-700',
+  'Cardio': 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700',
+  'Dance': 'bg-pink-100 dark:bg-pink-900/30 border-pink-300 dark:border-pink-700',
+  'Other': 'bg-gray-100 dark:bg-gray-900/30 border-gray-300 dark:border-gray-700',
+};
 
 export default function Register() {
   const navigate = useNavigate();
@@ -22,6 +49,12 @@ export default function Register() {
   const [uploadedImage, setUploadedImage] = useState(null);
   const [branches, setBranches] = useState([]);
   const [branchesLoading, setBranchesLoading] = useState(true);
+
+  // Dynamic sports from selected branch
+  const [branchSports, setBranchSports] = useState([]);
+  const [branchSportsLoading, setBranchSportsLoading] = useState(false);
+  const [hasBranchSports, setHasBranchSports] = useState(false);
+
   const [formData, setFormData] = useState({
     // Basic Personal Details
     name: '',
@@ -34,12 +67,12 @@ export default function Register() {
     password: '',
     confirmPassword: '',
     branchId: '',
-    
+
     // Emergency Contact
     emergencyContactName: '',
     emergencyRelation: '',
     emergencyContactNumber: '',
-    
+
     // Health & Medical Information - General Health Declaration
     chronicIllness: '',
     chronicIllnessDetails: '',
@@ -48,7 +81,7 @@ export default function Register() {
     medicationDetails: '',
     allergies: '',
     allergyDetails: '',
-    
+
     // Injury History
     majorInjury: '',
     injuryDetails: '',
@@ -56,16 +89,16 @@ export default function Register() {
     jointInjuryDetails: '',
     fractureHistory: '',
     fractureDetails: '',
-    
+
     // Sports Selection
     selectedSports: [],
-    
+
     // Fitness Level & Experience
     fitnessLevel: '',
     priorTraining: '',
     trainingYears: '',
     competitionExperience: '',
-    
+
     agreeToTerms: false,
   });
 
@@ -87,6 +120,44 @@ export default function Register() {
     fetchBranches();
   }, []);
 
+  // Fetch branch sports when branch is selected
+  useEffect(() => {
+    const fetchBranchSports = async () => {
+      if (!formData.branchId) {
+        setBranchSports([]);
+        setHasBranchSports(false);
+        return;
+      }
+      try {
+        setBranchSportsLoading(true);
+        const data = await authService.getBranchSports(formData.branchId);
+        if (data.status === 'success') {
+          const sports = data.data.sports || [];
+          setBranchSports(sports);
+          setHasBranchSports(sports.length > 0);
+        }
+      } catch (error) {
+        console.error('Failed to fetch branch sports:', error);
+        setBranchSports([]);
+        setHasBranchSports(false);
+      } finally {
+        setBranchSportsLoading(false);
+      }
+    };
+    fetchBranchSports();
+    // Clear selected sports when branch changes
+    setFormData(prev => ({ ...prev, selectedSports: [] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.branchId]);
+
+  // Group branch sports by category for display
+  const groupedBranchSports = branchSports.reduce((acc, sport) => {
+    const category = sport.category || 'Other';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(sport);
+    return acc;
+  }, {});
+
   const avatarOptions = [
     'https://api.dicebear.com/7.x/avataaars/svg?seed=John',
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah',
@@ -96,64 +167,6 @@ export default function Register() {
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Lisa',
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Alex',
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Maria',
-  ];
-
-  const sportsOptions = [
-    { 
-      category: 'Swimming', 
-      value: 'swimming',
-      icon: Waves,
-      color: 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700'
-    },
-    { 
-      category: 'Martial Arts', 
-      icon: Swords,
-      color: 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700',
-      options: [
-        { name: 'Karate', value: 'karate' },
-        { name: 'Kung Fu', value: 'kung-fu' },
-        { name: 'Taekwondo', value: 'taekwondo' },
-        { name: 'Judo', value: 'judo' },
-        { name: 'Brazilian Jiu-Jitsu', value: 'bjj' },
-        { name: 'Boxing', value: 'boxing' },
-        { name: 'Kickboxing', value: 'kickboxing' },
-        { name: 'Wrestling', value: 'wrestling' }
-      ]
-    },
-    { 
-      category: 'Racket Sports',
-      icon: Trophy,
-      color: 'bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700',
-      options: [
-        { name: 'Badminton', value: 'badminton' },
-        { name: 'Table Tennis', value: 'table-tennis' },
-        { name: 'Squash', value: 'squash' },
-        { name: 'Racquetball', value: 'racquetball' }
-      ]
-    },
-    { 
-      category: 'Gym & Training',
-      icon: Weight,
-      color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700',
-      options: [
-        { name: 'Gym Workout', value: 'gym-workout' },
-        { name: 'Weightlifting', value: 'weightlifting' },
-        { name: 'Cross-training', value: 'cross-training' },
-        { name: 'Calisthenics', value: 'calisthenics' },
-        { name: 'Bodybuilding', value: 'bodybuilding' }
-      ]
-    },
-    { 
-      category: 'Skill & Precision',
-      icon: Target,
-      color: 'bg-orange-100 dark:bg-orange-900/30 border-orange-300 dark:border-orange-700',
-      options: [
-        { name: 'Indoor Shooting (Air Rifle/Pistol)', value: 'indoor-shooting' },
-        { name: 'Archery', value: 'archery' },
-        { name: 'Billiards/Pool/Snooker', value: 'billiards' },
-        { name: 'Chess', value: 'chess' }
-      ]
-    }
   ];
 
   const handleChangeAvatar = () => {
@@ -181,26 +194,26 @@ export default function Register() {
     setShowAvatarModal(false);
   };
 
-  const handleSportToggle = (sport) => {
+  const handleSportToggle = (sportName) => {
     const currentSports = formData.selectedSports;
-    if (currentSports.includes(sport)) {
+    if (currentSports.includes(sportName)) {
       setFormData({
         ...formData,
-        selectedSports: currentSports.filter(s => s !== sport)
+        selectedSports: currentSports.filter(s => s !== sportName)
       });
     } else {
       setFormData({
         ...formData,
-        selectedSports: [...currentSports, sport]
+        selectedSports: [...currentSports, sportName]
       });
     }
   };
 
   const validateStep = (currentStep) => {
-    switch(currentStep) {
+    switch (currentStep) {
       case 1:
-        if (!formData.name || !formData.dob || !formData.gender || !formData.mobileNumber || 
-            !formData.email || !formData.address || !formData.password || !formData.confirmPassword) {
+        if (!formData.name || !formData.dob || !formData.gender || !formData.mobileNumber ||
+          !formData.email || !formData.address || !formData.password || !formData.confirmPassword) {
           toast.error('Please fill in all required fields in Basic Personal Details');
           return false;
         }
@@ -217,14 +230,14 @@ export default function Register() {
           return false;
         }
         return true;
-      
+
       case 2:
         if (!formData.emergencyContactName || !formData.emergencyRelation || !formData.emergencyContactNumber) {
           toast.error('Please fill in all emergency contact details');
           return false;
         }
         return true;
-      
+
       case 3:
         if (!formData.chronicIllness || !formData.faintingSpells || !formData.regularMedication || !formData.allergies) {
           toast.error('Please answer all general health questions');
@@ -235,14 +248,15 @@ export default function Register() {
           return false;
         }
         return true;
-      
+
       case 4:
-        if (formData.selectedSports.length === 0) {
+        // Only require sports selection if the branch has configured sports
+        if (hasBranchSports && formData.selectedSports.length === 0) {
           toast.error('Please select at least one sport');
           return false;
         }
         return true;
-      
+
       case 5:
         if (!formData.fitnessLevel || !formData.priorTraining || !formData.competitionExperience) {
           toast.error('Please fill in all fitness level information');
@@ -257,7 +271,7 @@ export default function Register() {
           return false;
         }
         return true;
-      
+
       default:
         return true;
     }
@@ -275,7 +289,7 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validateStep(5)) {
       return;
     }
@@ -338,9 +352,8 @@ export default function Register() {
             <div className="flex items-center gap-2">
               {[1, 2, 3, 4, 5].map((num) => (
                 <div key={num} className="flex items-center">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 ${
-                    step >= num ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'
-                  }`}>
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full flex-shrink-0 ${step >= num ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-600'
+                    }`}>
                     {step > num ? <CheckCircle className="h-5 w-5" /> : num}
                   </div>
                   {num < 5 && (
@@ -606,7 +619,7 @@ export default function Register() {
               <div className="space-y-6">
                 <div className="space-y-4">
                   <h4 className="font-semibold text-sm">A. General Health Declaration</h4>
-                  
+
                   <div className="space-y-2">
                     <Label>Do you have any chronic illness? (Asthma, Diabetes, High BP, Heart Problem, etc.) *</Label>
                     <RadioGroup
@@ -702,7 +715,7 @@ export default function Register() {
 
                 <div className="space-y-4">
                   <h4 className="font-semibold text-sm">B. Injury History</h4>
-                  
+
                   <div className="space-y-2">
                     <Label>Have you had any major injury or surgery in the past 6-12 months? *</Label>
                     <RadioGroup
@@ -790,33 +803,50 @@ export default function Register() {
               </div>
             )}
 
-            {/* Step 4: Select Sports */}
+            {/* Step 4: Select Sports - Dynamic from club */}
             {step === 4 && (
               <div className="space-y-4">
-                <div className="space-y-4">
-                  <Label>Select Sports (Click on the sport icon to select) *</Label>
-                  
-                  {sportsOptions.map((category, idx) => {
-                    const IconComponent = category.icon;
-                    return (
-                      <div key={idx} className="space-y-3">
-                        <h4 className="font-semibold text-sm flex items-center gap-2">
-                          <IconComponent className="h-5 w-5" />
-                          {category.category}
-                        </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {category.options ? (
-                            category.options.map((sport) => {
-                              const isSelected = formData.selectedSports.includes(sport.value);
+                {branchSportsLoading ? (
+                  <div className="flex items-center justify-center p-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-emerald-600 mr-2" />
+                    <span>Loading available sports...</span>
+                  </div>
+                ) : !hasBranchSports ? (
+                  <div className="p-6 text-center border rounded-lg bg-yellow-50 dark:bg-yellow-900/20">
+                    <Dumbbell className="h-12 w-12 mx-auto mb-3 text-yellow-600" />
+                    <h4 className="font-semibold mb-2">No Sports Configured Yet</h4>
+                    <p className="text-sm text-muted-foreground">
+                      This club hasn&apos;t configured their sports yet. You can continue with registration
+                      and your sports preferences will be updated later by the club admin.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Label>Select Sports Available at {selectedBranch?.name || 'Your Club'} *</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Click on the sports you&apos;re interested in. Only sports offered by this club are shown.
+                    </p>
+
+                    {Object.entries(groupedBranchSports).map(([category, categorySports]) => {
+                      const IconComponent = categoryIcons[category] || HelpCircle;
+                      const colorClass = categoryColors[category] || categoryColors['Other'];
+                      return (
+                        <div key={category} className="space-y-3">
+                          <h4 className="font-semibold text-sm flex items-center gap-2">
+                            <IconComponent className="h-5 w-5" />
+                            {category}
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {categorySports.map((sport) => {
+                              const isSelected = formData.selectedSports.includes(sport.name);
                               return (
                                 <div
-                                  key={sport.value}
-                                  className={`cursor-pointer rounded-lg border-2 p-4 transition-all hover:scale-105 ${
-                                    isSelected 
-                                      ? `${category.color} border-emerald-600 shadow-md` 
-                                      : 'border-gray-200 hover:border-gray-300'
-                                  }`}
-                                  onClick={() => handleSportToggle(sport.value)}
+                                  key={sport._id || sport.name}
+                                  className={`cursor-pointer rounded-lg border-2 p-4 transition-all hover:scale-105 ${isSelected
+                                    ? `${colorClass} border-emerald-600 shadow-md`
+                                    : 'border-gray-200 hover:border-gray-300'
+                                    }`}
+                                  onClick={() => handleSportToggle(sport.name)}
                                 >
                                   <div className="flex flex-col items-center gap-2 text-center">
                                     <IconComponent className={`h-8 w-8 ${isSelected ? 'text-emerald-600' : 'text-gray-600'}`} />
@@ -824,27 +854,13 @@ export default function Register() {
                                   </div>
                                 </div>
                               );
-                            })
-                          ) : (
-                            <div
-                              className={`cursor-pointer rounded-lg border-2 p-4 transition-all hover:scale-105 ${
-                                formData.selectedSports.includes(category.value)
-                                  ? `${category.color} border-emerald-600 shadow-md`
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                              onClick={() => handleSportToggle(category.value)}
-                            >
-                              <div className="flex flex-col items-center gap-2 text-center">
-                                <IconComponent className={`h-8 w-8 ${formData.selectedSports.includes(category.value) ? 'text-emerald-600' : 'text-gray-600'}`} />
-                                <span className="text-sm font-medium">{category.category}</span>
-                              </div>
-                            </div>
-                          )}
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {formData.selectedSports.length > 0 && (
                   <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
@@ -942,7 +958,7 @@ export default function Register() {
                   <Checkbox
                     id="terms"
                     checked={formData.agreeToTerms}
-                    onCheckedChange={(checked) => 
+                    onCheckedChange={(checked) =>
                       setFormData({ ...formData, agreeToTerms: checked })
                     }
                   />
@@ -1000,9 +1016,8 @@ export default function Register() {
               {avatarOptions.map((avatar, index) => (
                 <div
                   key={index}
-                  className={`cursor-pointer rounded-lg border-2 p-2 transition-all hover:border-emerald-600 ${
-                    selectedAvatar === avatar ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950' : 'border-gray-200'
-                  }`}
+                  className={`cursor-pointer rounded-lg border-2 p-2 transition-all hover:border-emerald-600 ${selectedAvatar === avatar ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950' : 'border-gray-200'
+                    }`}
                   onClick={() => {
                     setSelectedAvatar(avatar);
                     setUploadedImage(null);
@@ -1028,9 +1043,9 @@ export default function Register() {
                 className="hidden"
                 id="avatar-upload"
               />
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => document.getElementById('avatar-upload').click()}
               >
                 Upload Image

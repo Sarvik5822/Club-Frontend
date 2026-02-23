@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Users, IndianRupee, Activity, Clock, AlertCircle } from 'lucide-react';
+import { Users, IndianRupee, Activity, AlertCircle } from 'lucide-react';
 import adminService from '@/services/adminService';
 import { useToast } from '@/hooks/use-toast';
 

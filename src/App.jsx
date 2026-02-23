@@ -44,6 +44,7 @@ import Membership from './pages/member/Membership';
 import Feedback from './pages/member/Feedback';
 import Payments from './pages/member/Payments';
 import MemberMessages from './pages/member/Messages';
+import MemberEvents from './pages/member/Events';
 
 // Coach Pages - UPDATED for walk-in model
 import CoachDashboard from './pages/coach/Dashboard';
@@ -56,6 +57,7 @@ import CoachSettings from './pages/coach/Settings';
 import CoachMessages from './pages/coach/Messages';
 import Incidents from './pages/coach/Incidents';
 import Resources from './pages/coach/Resources';
+import CoachAnnouncements from './pages/coach/Announcements';
 
 // Admin Pages
 import AdminDashboard from './pages/admin/Dashboard';
@@ -73,6 +75,7 @@ import AdminProfile from './pages/admin/Profile';
 import AdminAttendance from './pages/admin/Attendance';
 import AdminEvents from './pages/admin/Events';
 import AdminMembershipPlans from './pages/admin/MembershipPlans';
+import AdminClubSports from './pages/admin/ClubSports';
 
 // Superadmin Pages
 import SuperadminDashboard from './pages/superadmin/Dashboard';
@@ -85,6 +88,8 @@ import MasterData from './pages/superadmin/MasterData';
 import AuditLogs from './pages/superadmin/AuditLogs';
 import Analytics from './pages/superadmin/Analytics';
 import SuperadminProfile from './pages/superadmin/Profile';
+import SuperadminSettings from './pages/superadmin/Settings';
+import SuperadminAnnouncements from './pages/superadmin/Announcements';
 
 import Layout from './components/layout/Layout';
 import NotFound from './pages/NotFound';
@@ -111,6 +116,7 @@ const memberNavItems = [
     { label: 'Dashboard', href: '/member/dashboard', icon: LayoutDashboard },
     { label: 'Sports & Facilities', href: '/member/facilities', icon: Building },
     { label: 'Attendance', href: '/member/attendance', icon: Award },
+    { label: 'Events', href: '/member/events', icon: Calendar },
     { label: 'Membership', href: '/member/membership', icon: CreditCard },
     { label: 'Payments', href: '/member/payments', icon: IndianRupee },
     { label: 'Messages', href: '/member/messages', icon: MessageSquare },
@@ -128,6 +134,7 @@ const coachNavItems = [
     { label: 'Training Plans', href: '/coach/training-plans', icon: Dumbbell },
     { label: 'Training Resources', href: '/coach/resources', icon: Upload },
     { label: 'Messages', href: '/coach/messages', icon: MessageSquare },
+    { label: 'Announcements', href: '/coach/announcements', icon: Bell },
     { label: 'Reports', href: '/coach/reports', icon: BarChart3 },
     { label: 'Incident Reports', href: '/coach/incidents', icon: AlertCircle },
     { label: 'Profile', href: '/coach/profile', icon: User },
@@ -136,6 +143,7 @@ const coachNavItems = [
 
 const adminNavItems = [
     { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
+    { label: 'Sports & Activities', href: '/admin/club-sports', icon: Dumbbell },
     { label: 'Members', href: '/admin/members', icon: Users },
     { label: 'Coaches', href: '/admin/coaches', icon: Dumbbell },
     { label: 'Membership Plans', href: '/admin/membership-plans', icon: IndianRupee },
@@ -157,6 +165,7 @@ const superadminNavItems = [
     { label: 'Branches', href: '/superadmin/branches', icon: Building },
     { label: 'Pricing Plans', href: '/superadmin/pricing', icon: IndianRupee },
     { label: 'Payment Gateways', href: '/superadmin/payment-gateways', icon: CreditCard },
+    { label: 'Announcements', href: '/superadmin/announcements', icon: Bell },
     { label: 'Master Data', href: '/superadmin/master-data', icon: Database },
     { label: 'Audit Logs', href: '/superadmin/audit-logs', icon: Flag },
     { label: 'Analytics', href: '/superadmin/analytics', icon: BarChart3 },
@@ -190,6 +199,7 @@ const App = () => {
                             <Route path="attendance" element={<MemberAttendance />} />
                             <Route path="membership" element={<Membership />} />
                             <Route path="payments" element={<Payments />} />
+                            <Route path="events" element={<MemberEvents />} />
                             <Route path="messages" element={<MemberMessages />} />
                             <Route path="announcements" element={<MemberAnnouncements />} />
                             <Route path="feedback" element={<Feedback />} />
@@ -208,6 +218,7 @@ const App = () => {
                             <Route path="messages" element={<CoachMessages />} />
                             <Route path="reports" element={<CoachReports />} />
                             <Route path="incidents" element={<Incidents />} />
+                            <Route path="announcements" element={<CoachAnnouncements />} />
                             <Route path="profile" element={<CoachProfile />} />
                             <Route path="settings" element={<CoachSettings />} />
                         </Route>
@@ -218,6 +229,7 @@ const App = () => {
                             <Route path="members" element={<AdminMembers />} />
                             <Route path="members/:id" element={<AdminMemberDetail />} />
                             <Route path="coaches" element={<Coaches />} />
+                            <Route path="club-sports" element={<AdminClubSports />} />
                             <Route path="membership-plans" element={<AdminMembershipPlans />} />
                             <Route path="attendance" element={<AdminAttendance />} />
                             <Route path="events" element={<AdminEvents />} />
@@ -242,8 +254,9 @@ const App = () => {
                             <Route path="master-data" element={<MasterData />} />
                             <Route path="audit-logs" element={<AuditLogs />} />
                             <Route path="analytics" element={<Analytics />} />
+                            <Route path="announcements" element={<SuperadminAnnouncements />} />
                             <Route path="profile" element={<SuperadminProfile />} />
-                            <Route path="settings" element={<MemberSettings />} />
+                            <Route path="settings" element={<SuperadminSettings />} />
                         </Route>
 
                         {/* Default Routes */}

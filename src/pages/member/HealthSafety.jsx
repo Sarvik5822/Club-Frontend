@@ -1,137 +1,123 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Shield, Upload, FileText, AlertCircle, CheckCircle, Phone, User } from 'lucide-react';
+import { Shield, Upload, FileText, AlertCircle, CheckCircle, RefreshCw, Plus } from 'lucide-react';
+import memberService from '@/services/memberService';
 import { toast } from 'sonner';
 
 export default function HealthSafety() {
+  const [healthRecords, setHealthRecords] = useState([]);
+  const [waiverData, setWaiverData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showWaiverModal, setShowWaiverModal] = useState(false);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [showAddContactModal, setShowAddContactModal] = useState(false);
-  const [showEditContactModal, setShowEditContactModal] = useState(false);
-  const [editingContact, setEditingContact] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
 
-  const [emergencyContacts, setEmergencyContacts] = useState([
-    {
-      id: 1,
-      name: 'Jane Doe',
-      relationship: 'Spouse',
-      phone: '+1234567899',
-      isPrimary: true,
-    },
-    {
-      id: 2,
-      name: 'John Smith',
-      relationship: 'Brother',
-      phone: '+1234567888',
-      isPrimary: false,
-    },
-  ]);
+  const [uploadForm, setUploadForm] = useState({
+    type: '',
+    description: '',
+    documentUrl: '',
+    expiryDate: '',
+  });
 
-  const healthDocuments = [
-    {
-      id: 1,
-      name: 'Medical Certificate',
-      type: 'Medical',
-      uploadDate: '2026-01-15',
-      expiryDate: '2026-12-31',
-      status: 'valid',
-      fileUrl: '#',
-    },
-    {
-      id: 2,
-      name: 'Fitness Assessment',
-      type: 'Fitness',
-      uploadDate: '2026-01-10',
-      expiryDate: '2026-06-30',
-      status: 'expiring-soon',
-      fileUrl: '#',
-    },
-  ];
-
-  const waiverStatus = {
-    signed: true,
-    signedDate: '2026-01-15',
-    version: '2.0',
-  };
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [recordsRes, waiverRes] = await Promise.allSettled([
+        memberService.getHealthRecords(),
+        memberService.getWaivers(),
+      ]);
+      if (recordsRes.status === 'fulfilled') {
+        setHealthRecords(recordsRes.value.data?.healthRecords || []);
+      }
+      if (waiverRes.status === 'fulfilled') {
+        setWaiverData(waiverRes.value.data);
+      }
+    } catch (error) {
+      toast.error('Failed to load health data: ' + error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleUpload = () => {
-    if (!selectedFile) {
-      toast.error('Please select a file to upload');
-      return;
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleUpload = async () => {
+    if (!uploadForm.type) { toast.error('Please select document type'); return; }
+    if (!uploadForm.description.trim()) { toast.error('Please enter a description'); return; }
+    try {
+      setUploading(true);
+      await memberService.uploadHealthRecord(uploadForm);
+      toast.success('Health record uploaded successfully!');
+      setShowUploadModal(false);
+      setUploadForm({ type: '', description: '', documentUrl: '', expiryDate: '' });
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to upload record: ' + error.message);
+    } finally {
+      setUploading(false);
     }
-    
-    toast.success('Document uploaded successfully');
-    setShowUploadModal(false);
-    setSelectedFile(null);
   };
 
-  const handleSignWaiver = () => {
-    toast.success('Liability waiver signed successfully');
-    setShowWaiverModal(false);
+  const handleAcknowledgeWaiver = async () => {
+    try {
+      setAcknowledging(true);
+      await memberService.acknowledgeWaiver({
+        waiverId: 'standard-waiver-v2',
+        signature: 'acknowledged',
+      });
+      toast.success('Liability waiver signed successfully!');
+      setShowWaiverModal(false);
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to sign waiver: ' + error.message);
+    } finally {
+      setAcknowledging(false);
+    }
   };
 
-  const handleAddContact = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const newContact = {
-      id: emergencyContacts.length + 1,
-      name: formData.get('name'),
-      relationship: formData.get('relationship'),
-      phone: formData.get('phone'),
-      isPrimary: formData.get('isPrimary') === 'on',
-    };
-    setEmergencyContacts([...emergencyContacts, newContact]);
-    toast.success('Emergency contact added successfully');
-    setShowAddContactModal(false);
+  const getStatusConfig = (status) => {
+    switch (status) {
+      case 'approved':
+      case 'valid':
+        return { label: 'Valid', class: 'bg-green-500 text-white' };
+      case 'pending':
+        return { label: 'Pending Review', class: 'bg-yellow-500 text-white' };
+      case 'rejected':
+      case 'expired':
+        return { label: status === 'rejected' ? 'Rejected' : 'Expired', class: 'bg-red-500 text-white' };
+      default:
+        return { label: status, class: 'bg-gray-500 text-white' };
+    }
   };
 
-  const handleEditContact = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const updatedContacts = emergencyContacts.map(contact => 
-      contact.id === editingContact.id 
-        ? {
-            ...contact,
-            name: formData.get('name'),
-            relationship: formData.get('relationship'),
-            phone: formData.get('phone'),
-            isPrimary: formData.get('isPrimary') === 'on',
-          }
-        : contact
-    );
-    setEmergencyContacts(updatedContacts);
-    toast.success('Emergency contact updated successfully');
-    setShowEditContactModal(false);
-    setEditingContact(null);
-  };
-
-  const openEditModal = (contact) => {
-    setEditingContact(contact);
-    setShowEditContactModal(true);
-  };
+  const hasSignedWaiver = waiverData?.hasAcknowledged || (waiverData?.waivers && waiverData.waivers.length > 0);
+  const latestWaiver = waiverData?.waivers?.[waiverData.waivers.length - 1];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Health & Safety</h1>
-        <p className="text-muted-foreground mt-1">Manage your health documents and safety information</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Health & Safety</h1>
+          <p className="text-muted-foreground mt-1">Manage your health documents and safety information</p>
+        </div>
+        <Button variant="outline" onClick={fetchData} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
-      {/* Health Documents */}
+      {/* Health Records */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -139,60 +125,68 @@ export default function HealthSafety() {
             Medical Documents
           </CardTitle>
           <Button onClick={() => setShowUploadModal(true)}>
-            <Upload className="h-4 w-4 mr-2" />
+            <Plus className="h-4 w-4 mr-2" />
             Upload Document
           </Button>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {healthDocuments.map((doc) => (
-              <div
-                key={doc.id}
-                className="flex items-center justify-between p-4 rounded-lg border"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
-                    <FileText className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">{doc.name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Type: {doc.type} • Uploaded: {new Date(doc.uploadDate).toLocaleDateString()}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Expires: {new Date(doc.expiryDate).toLocaleDateString()}
-                    </p>
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2].map(i => (
+                <div key={i} className="flex items-center gap-4 p-4 border rounded-lg">
+                  <Skeleton className="w-12 h-12 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-1/2" />
+                    <Skeleton className="h-3 w-3/4" />
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={
-                      doc.status === 'valid' ? 'default' :
-                      doc.status === 'expiring-soon' ? 'secondary' :
-                      'destructive'
-                    }
-                    className={
-                      doc.status === 'valid' ? 'bg-green-500' :
-                      doc.status === 'expiring-soon' ? 'bg-yellow-500' :
-                      ''
-                    }
-                  >
-                    {doc.status === 'valid' ? 'Valid' :
-                     doc.status === 'expiring-soon' ? 'Expiring Soon' :
-                     'Expired'}
-                  </Badge>
-                  <Button variant="outline" size="sm">
-                    View
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : healthRecords.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="h-10 w-10 mx-auto mb-3" />
+              <p>No health records uploaded yet</p>
+              <Button className="mt-4" onClick={() => setShowUploadModal(true)}>
+                Upload Your First Document
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {healthRecords.map((doc) => {
+                const statusConfig = getStatusConfig(doc.status);
+                return (
+                  <div key={doc._id} className="flex items-center justify-between p-4 rounded-lg border">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-full bg-blue-100 dark:bg-blue-900">
+                        <FileText className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold capitalize">{doc.type?.replace(/_/g, ' ')}</h4>
+                        <p className="text-sm text-muted-foreground">{doc.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Uploaded: {new Date(doc.createdAt).toLocaleDateString()}
+                          {doc.expiryDate && ` • Expires: ${new Date(doc.expiryDate).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={statusConfig.class}>{statusConfig.label}</Badge>
+                      {doc.documentUrl && (
+                        <Button variant="outline" size="sm" asChild>
+                          <a href={doc.documentUrl} target="_blank" rel="noopener noreferrer">View</a>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Liability Waiver */}
-      <Card className={waiverStatus.signed ? 'border-green-500' : 'border-amber-500'}>
+      <Card className={hasSignedWaiver ? 'border-green-500' : 'border-amber-500'}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
@@ -200,17 +194,19 @@ export default function HealthSafety() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {waiverStatus.signed ? (
+          {loading ? (
+            <Skeleton className="h-20 w-full rounded-lg" />
+          ) : hasSignedWaiver ? (
             <div className="space-y-4">
               <div className="flex items-center gap-3 p-4 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-                <CheckCircle className="h-6 w-6 text-green-600" />
+                <CheckCircle className="h-6 w-6 text-green-600 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-green-900 dark:text-green-100">
-                    Waiver Signed
-                  </p>
-                  <p className="text-sm text-green-700 dark:text-green-300">
-                    Signed on {new Date(waiverStatus.signedDate).toLocaleDateString()} • Version {waiverStatus.version}
-                  </p>
+                  <p className="font-semibold text-green-900 dark:text-green-100">Waiver Signed</p>
+                  {latestWaiver && (
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      Acknowledged on {new Date(latestWaiver.acknowledgedAt).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
               </div>
               <Button variant="outline" onClick={() => setShowWaiverModal(true)}>
@@ -220,11 +216,9 @@ export default function HealthSafety() {
           ) : (
             <div className="space-y-4">
               <div className="flex items-center gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800">
-                <AlertCircle className="h-6 w-6 text-amber-600" />
+                <AlertCircle className="h-6 w-6 text-amber-600 flex-shrink-0" />
                 <div>
-                  <p className="font-semibold text-amber-900 dark:text-amber-100">
-                    Action Required
-                  </p>
+                  <p className="font-semibold text-amber-900 dark:text-amber-100">Action Required</p>
                   <p className="text-sm text-amber-700 dark:text-amber-300">
                     Please review and sign the liability waiver to continue using our facilities
                   </p>
@@ -238,100 +232,61 @@ export default function HealthSafety() {
         </CardContent>
       </Card>
 
-      {/* Emergency Contacts */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Phone className="h-5 w-5" />
-            Emergency Contacts
-          </CardTitle>
-          <Button variant="outline" onClick={() => setShowAddContactModal(true)}>
-            <User className="h-4 w-4 mr-2" />
-            Add Contact
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {emergencyContacts.map((contact) => (
-              <div
-                key={contact.id}
-                className="flex items-center justify-between p-4 rounded-lg border"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-full bg-purple-100 dark:bg-purple-900">
-                    <User className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-semibold">{contact.name}</h4>
-                      {contact.isPrimary && (
-                        <Badge variant="secondary" className="bg-purple-100 text-purple-700">
-                          Primary
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {contact.relationship} • {contact.phone}
-                    </p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => openEditModal(contact)}>
-                  Edit
-                </Button>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Upload Document Modal */}
       <Dialog open={showUploadModal} onOpenChange={setShowUploadModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Upload Medical Document</DialogTitle>
-            <DialogDescription>
-              Upload your medical certificate or fitness assessment
-            </DialogDescription>
+            <DialogTitle>Upload Health Document</DialogTitle>
+            <DialogDescription>Upload your medical certificate or fitness assessment</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="docType">Document Type</Label>
-              <select id="docType" className="w-full p-2 border rounded-md">
-                <option value="">Select type...</option>
-                <option value="medical">Medical Certificate</option>
-                <option value="fitness">Fitness Assessment</option>
-                <option value="other">Other</option>
-              </select>
+              <Label>Document Type *</Label>
+              <Select value={uploadForm.type} onValueChange={(v) => setUploadForm(p => ({ ...p, type: v }))}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select type..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="medical_certificate">Medical Certificate</SelectItem>
+                  <SelectItem value="fitness_assessment">Fitness Assessment</SelectItem>
+                  <SelectItem value="vaccination_record">Vaccination Record</SelectItem>
+                  <SelectItem value="insurance">Insurance Document</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="file">Select File</Label>
-              <Input
-                id="file"
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={handleFileSelect}
-              />
-              {selectedFile && (
-                <p className="text-sm text-muted-foreground">
-                  Selected: {selectedFile.name}
-                </p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes (Optional)</Label>
+              <Label>Description *</Label>
               <Textarea
-                id="notes"
-                placeholder="Add any additional notes about this document"
+                placeholder="Describe this document..."
                 rows={3}
+                value={uploadForm.description}
+                onChange={(e) => setUploadForm(p => ({ ...p, description: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Document URL</Label>
+              <Input
+                placeholder="https://... (link to your document)"
+                value={uploadForm.documentUrl}
+                onChange={(e) => setUploadForm(p => ({ ...p, documentUrl: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">Provide a link to the document (e.g., Google Drive, Dropbox)</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Expiry Date</Label>
+              <Input
+                type="date"
+                value={uploadForm.expiryDate}
+                onChange={(e) => setUploadForm(p => ({ ...p, expiryDate: e.target.value }))}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowUploadModal(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpload}>
-              Upload Document
+            <Button variant="outline" onClick={() => setShowUploadModal(false)}>Cancel</Button>
+            <Button onClick={handleUpload} disabled={uploading}>
+              <Upload className="h-4 w-4 mr-2" />
+              {uploading ? 'Uploading...' : 'Upload Document'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -342,9 +297,7 @@ export default function HealthSafety() {
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Liability Waiver & Release Form</DialogTitle>
-            <DialogDescription>
-              Please read carefully and sign to acknowledge
-            </DialogDescription>
+            <DialogDescription>Please read carefully and sign to acknowledge</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="p-4 border rounded-lg space-y-3 text-sm">
@@ -371,106 +324,14 @@ export default function HealthSafety() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowWaiverModal(false)}>
-              {waiverStatus.signed ? 'Close' : 'Cancel'}
+              {hasSignedWaiver ? 'Close' : 'Cancel'}
             </Button>
-            {!waiverStatus.signed && (
-              <Button onClick={handleSignWaiver}>
-                I Agree & Sign
+            {!hasSignedWaiver && (
+              <Button onClick={handleAcknowledgeWaiver} disabled={acknowledging}>
+                {acknowledging ? 'Signing...' : 'I Agree & Sign'}
               </Button>
             )}
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Contact Modal */}
-      <Dialog open={showAddContactModal} onOpenChange={setShowAddContactModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Emergency Contact</DialogTitle>
-            <DialogDescription>
-              Add a new emergency contact person
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleAddContact}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="add-name">Full Name</Label>
-                <Input id="add-name" name="name" placeholder="Jane Doe" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="add-relationship">Relationship</Label>
-                <Input id="add-relationship" name="relationship" placeholder="Spouse" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="add-phone">Phone Number</Label>
-                <Input id="add-phone" name="phone" type="tel" placeholder="+1234567890" required />
-              </div>
-              <div className="flex items-center gap-2">
-                <input type="checkbox" id="add-isPrimary" name="isPrimary" className="rounded" />
-                <Label htmlFor="add-isPrimary" className="text-sm">
-                  Set as primary contact
-                </Label>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowAddContactModal(false)}>
-                Cancel
-              </Button>
-              <Button type="submit">
-                Add Contact
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Contact Modal */}
-      <Dialog open={showEditContactModal} onOpenChange={setShowEditContactModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Emergency Contact</DialogTitle>
-            <DialogDescription>
-              Update emergency contact information
-            </DialogDescription>
-          </DialogHeader>
-          {editingContact && (
-            <form onSubmit={handleEditContact}>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-name">Full Name</Label>
-                  <Input id="edit-name" name="name" defaultValue={editingContact.name} required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-relationship">Relationship</Label>
-                  <Input id="edit-relationship" name="relationship" defaultValue={editingContact.relationship} required />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-phone">Phone Number</Label>
-                  <Input id="edit-phone" name="phone" type="tel" defaultValue={editingContact.phone} required />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="checkbox" 
-                    id="edit-isPrimary" 
-                    name="isPrimary" 
-                    className="rounded" 
-                    defaultChecked={editingContact.isPrimary}
-                  />
-                  <Label htmlFor="edit-isPrimary" className="text-sm">
-                    Set as primary contact
-                  </Label>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowEditContactModal(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit">
-                  Save Changes
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
         </DialogContent>
       </Dialog>
     </div>

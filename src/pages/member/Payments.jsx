@@ -1,15 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { mockPayments } from '../../lib/mockData';
-import { Download, CreditCard, Calendar, IndianRupee, Plus } from 'lucide-react';
+import { Download, CreditCard, Calendar, IndianRupee, Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import memberService from '@/services/memberService';
 
 export default function Payments() {
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('card');
 
@@ -18,6 +20,42 @@ export default function Payments() {
     { id: 'stripe', name: 'Stripe', icon: CreditCard, description: 'Secure payment via Stripe' },
     { id: 'paypal', name: 'PayPal', icon: IndianRupee, description: 'Pay with PayPal account' },
   ];
+
+  const fetchPayments = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await memberService.getPayments();
+      if (response.status === 'success') {
+        setPayments(response.data?.payments || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch payments:', error);
+      toast.error('Failed to load payment data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
+
+  // Calculate totals from API data
+  const totalPaid = payments
+    .filter(p => p.status === 'paid' || p.status === 'completed')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const totalPending = payments
+    .filter(p => p.status === 'pending')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const thisMonth = new Date();
+  const thisMonthPayments = payments
+    .filter(p => {
+      const pDate = new Date(p.createdAt || p.date);
+      return pDate.getMonth() === thisMonth.getMonth() && pDate.getFullYear() === thisMonth.getFullYear();
+    })
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
 
   const handleAddPaymentMethod = () => {
     setShowPaymentMethodModal(true);
@@ -28,6 +66,15 @@ export default function Payments() {
     toast.success(`${methodName} added successfully!`);
     setShowPaymentMethodModal(false);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+        <span className="ml-2 text-muted-foreground">Loading payments...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -42,7 +89,7 @@ export default function Payments() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Paid</p>
-                <p className="text-2xl font-bold mt-1">$623</p>
+                <p className="text-2xl font-bold mt-1">${totalPaid}</p>
               </div>
               <div className="p-3 rounded-full bg-success/10">
                 <IndianRupee className="h-5 w-5 text-success" />
@@ -55,7 +102,7 @@ export default function Payments() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold mt-1">$299</p>
+                <p className="text-2xl font-bold mt-1">${totalPending}</p>
               </div>
               <div className="p-3 rounded-full bg-warning/10">
                 <Calendar className="h-5 w-5 text-warning" />
@@ -68,7 +115,7 @@ export default function Payments() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">This Month</p>
-                <p className="text-2xl font-bold mt-1">$324</p>
+                <p className="text-2xl font-bold mt-1">${thisMonthPayments}</p>
               </div>
               <div className="p-3 rounded-full bg-primary-100 dark:bg-primary-900">
                 <CreditCard className="h-5 w-5 text-primary-600" />
@@ -103,18 +150,6 @@ export default function Payments() {
               </div>
               <Badge>Default</Badge>
             </div>
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
-                  <IndianRupee className="h-5 w-5 text-gray-600" />
-                </div>
-                <div>
-                  <p className="font-medium">PayPal</p>
-                  <p className="text-sm text-muted-foreground">john.doe@example.com</p>
-                </div>
-              </div>
-              <Button variant="outline" size="sm">Remove</Button>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -126,49 +161,57 @@ export default function Payments() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {mockPayments.map((payment) => (
-              <div
-                key={payment.id}
-                className="flex items-center justify-between p-4 rounded-lg border hover:border-primary-600 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-full ${
-                    payment.status === 'paid' ? 'bg-success/10' :
-                    payment.status === 'pending' ? 'bg-warning/10' :
-                    'bg-gray-100 dark:bg-gray-800'
-                  }`}>
-                    <CreditCard className={`h-5 w-5 ${
-                      payment.status === 'paid' ? 'text-success' :
-                      payment.status === 'pending' ? 'text-warning' :
-                      'text-gray-500'
-                    }`} />
+            {payments.length > 0 ? (
+              payments.map((payment) => (
+                <div
+                  key={payment._id || payment.id}
+                  className="flex items-center justify-between p-4 rounded-lg border hover:border-primary-600 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-full ${
+                      payment.status === 'paid' || payment.status === 'completed' ? 'bg-success/10' :
+                      payment.status === 'pending' ? 'bg-warning/10' :
+                      'bg-gray-100 dark:bg-gray-800'
+                    }`}>
+                      <CreditCard className={`h-5 w-5 ${
+                        payment.status === 'paid' || payment.status === 'completed' ? 'text-success' :
+                        payment.status === 'pending' ? 'text-warning' :
+                        'text-gray-500'
+                      }`} />
+                    </div>
+                    <div>
+                      <p className="font-semibold">{payment.description || payment.type}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(payment.createdAt || payment.date).toLocaleDateString()}
+                        {payment.method ? ` • ${payment.method}` : ''}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-semibold">{payment.description}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(payment.date).toLocaleDateString()} • {payment.method}
-                    </p>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="font-semibold text-lg">${payment.amount}</p>
+                      <Badge variant={
+                        payment.status === 'paid' || payment.status === 'completed' ? 'default' :
+                        payment.status === 'pending' ? 'secondary' :
+                        'destructive'
+                      }>
+                        {payment.status}
+                      </Badge>
+                    </div>
+                    {payment.invoiceUrl && (
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <p className="font-semibold text-lg">${payment.amount}</p>
-                    <Badge variant={
-                      payment.status === 'paid' ? 'default' :
-                      payment.status === 'pending' ? 'secondary' :
-                      'destructive'
-                    }>
-                      {payment.status}
-                    </Badge>
-                  </div>
-                  {payment.invoiceUrl && (
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <CreditCard className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No payment records found</p>
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>

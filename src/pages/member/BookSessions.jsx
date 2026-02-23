@@ -22,11 +22,11 @@ export default function BookSessions() {
 
   const filteredSessions = mockSessions.filter(session => {
     const matchesSearch = session.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         session.sport.toLowerCase().includes(searchTerm.toLowerCase());
+      session.sport.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesSport = selectedSport === 'all' || session.sport === selectedSport;
     const matchesLocation = selectedLocation === 'all' || session.location === selectedLocation;
     const matchesDifficulty = selectedDifficulty === 'all' || session.difficulty === selectedDifficulty;
-    
+
     return matchesSearch && matchesSport && matchesLocation && matchesDifficulty;
   });
 
@@ -133,8 +133,8 @@ export default function BookSessions() {
       {/* Sessions Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredSessions.map((session) => (
-          <Card 
-            key={session.id} 
+          <Card
+            key={session.id}
             className="card-hover overflow-hidden cursor-pointer"
             onClick={() => handleViewSession(session)}
           >
@@ -153,8 +153,8 @@ export default function BookSessions() {
                 </div>
                 <Badge className={
                   session.difficulty === 'Beginner' ? 'bg-green-500' :
-                  session.difficulty === 'Intermediate' ? 'bg-yellow-500' :
-                  'bg-red-500'
+                    session.difficulty === 'Intermediate' ? 'bg-yellow-500' :
+                      'bg-red-500'
                 }>
                   {session.difficulty}
                 </Badge>
@@ -197,7 +197,7 @@ export default function BookSessions() {
 
               <div className="flex items-center justify-between pt-3 border-t">
                 <span className="text-lg font-bold text-primary-600">${session.price}</span>
-                <Button 
+                <Button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleViewSession(session);

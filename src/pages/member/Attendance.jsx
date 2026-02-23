@@ -1,71 +1,85 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, TrendingUp, Award, Target, Clock, Fingerprint, Building } from 'lucide-react';
-import { mockAttendanceRecords } from '@/lib/mockData';
-import { useAuth } from '@/lib/auth';
+import { Calendar, TrendingUp, Award, Target, Clock, Fingerprint, Loader2 } from 'lucide-react';
+import memberService from '@/services/memberService';
 
 export default function Attendance() {
-  const { user } = useAuth();
   const [timeFilter, setTimeFilter] = useState('all');
-  const [clubFilter, setClubFilter] = useState('all');
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [attendanceStats, setAttendanceStats] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Get user's attendance records
-  const userRecords = mockAttendanceRecords.filter(record => record.memberId === user?.id);
+  const fetchAttendance = useCallback(async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (timeFilter === 'week') {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        params.startDate = weekAgo.toISOString().split('T')[0];
+      } else if (timeFilter === 'month') {
+        const monthAgo = new Date();
+        monthAgo.setDate(monthAgo.getDate() - 30);
+        params.startDate = monthAgo.toISOString().split('T')[0];
+      }
 
-  // Apply filters
-  const filteredRecords = userRecords.filter(record => {
-    const recordDate = new Date(record.date);
-    
-    let matchesTime = true;
-    if (timeFilter === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      matchesTime = recordDate >= weekAgo;
-    } else if (timeFilter === 'month') {
-      const monthAgo = new Date();
-      monthAgo.setDate(monthAgo.getDate() - 30);
-      matchesTime = recordDate >= monthAgo;
+      const [attendanceRes, statsRes] = await Promise.all([
+        memberService.getAttendance(params),
+        memberService.getAttendanceStats(),
+      ]);
+
+      if (attendanceRes.status === 'success') {
+        setAttendanceRecords(attendanceRes.data?.attendance || []);
+      }
+      if (statsRes.status === 'success') {
+        setAttendanceStats(statsRes.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch attendance:', error);
+    } finally {
+      setLoading(false);
     }
-    
-    const matchesClub = clubFilter === 'all' || record.clubName === clubFilter;
-    
-    return matchesTime && matchesClub;
-  });
+  }, [timeFilter]);
 
-  // Calculate stats
-  const totalVisits = filteredRecords.length;
-  const totalMinutes = filteredRecords.reduce((sum, record) => sum + record.duration, 0);
-  const totalHours = Math.floor(totalMinutes / 60);
-  const avgDuration = totalVisits > 0 ? Math.round(totalMinutes / totalVisits) : 0;
+  useEffect(() => {
+    fetchAttendance();
+  }, [fetchAttendance]);
 
-  // Get unique clubs
-  const uniqueClubs = [...new Set(userRecords.map(r => r.clubName))];
+  const totalVisits = attendanceStats?.totalAttendance || 0;
+  const presentCount = attendanceStats?.presentCount || 0;
+  const absentCount = attendanceStats?.absentCount || 0;
+  const lateCount = attendanceStats?.lateCount || 0;
+  const attendanceRate = attendanceStats?.attendanceRate || 0;
 
   // Monthly goal calculation
-  const monthlyGoal = 20; // visits
-  const thisMonthVisits = userRecords.filter(record => {
-    const recordDate = new Date(record.date);
-    const now = new Date();
-    return recordDate.getMonth() === now.getMonth() && recordDate.getFullYear() === now.getFullYear();
-  }).length;
-  const goalProgress = Math.min((thisMonthVisits / monthlyGoal) * 100, 100);
+  const monthlyGoal = 20;
+  const goalProgress = Math.min((presentCount / monthlyGoal) * 100, 100);
 
   const stats = [
-    { label: 'Total Visits', value: totalVisits.toString(), icon: Calendar, color: 'text-primary-600' },
-    { label: 'Total Hours', value: `${totalHours}h ${totalMinutes % 60}m`, icon: Clock, color: 'text-success' },
-    { label: 'Avg Duration', value: `${avgDuration} min`, icon: TrendingUp, color: 'text-orange-600' },
-    { label: 'Monthly Goal', value: `${thisMonthVisits}/${monthlyGoal}`, icon: Target, color: 'text-accent-600' },
+    { label: 'Total Attendance', value: totalVisits.toString(), icon: Calendar, color: 'text-primary-600' },
+    { label: 'Present', value: presentCount.toString(), icon: Clock, color: 'text-success' },
+    { label: 'Attendance Rate', value: `${attendanceRate}%`, icon: TrendingUp, color: 'text-orange-600' },
+    { label: 'Monthly Goal', value: `${presentCount}/${monthlyGoal}`, icon: Target, color: 'text-accent-600' },
   ];
 
   const achievements = [
-    { title: '30-Day Streak', description: 'Attended for 30 consecutive days', earned: true, icon: '🔥' },
-    { title: 'Early Bird', description: 'Attended 10 morning sessions', earned: true, icon: '🌅' },
-    { title: 'Multi-Club Explorer', description: 'Visited 3 different clubs', earned: true, icon: '🏢' },
-    { title: 'Century Club', description: 'Completed 100 total visits', earned: false, icon: '💯' },
+    { title: '30-Day Streak', description: 'Attended for 30 consecutive days', earned: presentCount >= 30, icon: '🔥' },
+    { title: 'Early Bird', description: 'Attended 10 morning sessions', earned: presentCount >= 10, icon: '🌅' },
+    { title: 'Consistent', description: 'Attendance rate above 80%', earned: parseFloat(attendanceRate) >= 80, icon: '⭐' },
+    { title: 'Century Club', description: 'Completed 100 total visits', earned: totalVisits >= 100, icon: '💯' },
   ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+        <span className="ml-2 text-muted-foreground">Loading attendance...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -83,17 +97,6 @@ export default function Attendance() {
               <SelectItem value="all">All Time</SelectItem>
               <SelectItem value="week">This Week</SelectItem>
               <SelectItem value="month">This Month</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={clubFilter} onValueChange={setClubFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Club" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Clubs</SelectItem>
-              {uniqueClubs.map(club => (
-                <SelectItem key={club} value={club}>{club}</SelectItem>
-              ))}
             </SelectContent>
           </Select>
         </div>
@@ -129,49 +132,45 @@ export default function Attendance() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {filteredRecords.length > 0 ? (
-                filteredRecords.map((record) => (
+              {attendanceRecords.length > 0 ? (
+                attendanceRecords.map((record) => (
                   <div
-                    key={record.id}
+                    key={record._id || record.id}
                     className="flex items-center gap-4 p-4 rounded-lg border"
                   >
                     <div className="p-2 rounded-full bg-emerald-100 dark:bg-emerald-900">
                       <Fingerprint className="h-5 w-5 text-emerald-600" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-semibold">{record.facility}</h4>
+                      <h4 className="font-semibold">{record.session?.title || 'Session'}</h4>
                       <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {new Date(record.date).toLocaleDateString('en-US', { 
-                            month: 'short', 
-                            day: 'numeric', 
-                            year: 'numeric' 
+                          {new Date(record.date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
                           })}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(record.punchInTime).toLocaleTimeString('en-US', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })} - {new Date(record.punchOutTime).toLocaleTimeString('en-US', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Building className="h-3 w-3" />
-                          {record.clubName}
-                        </span>
+                        {record.punchInTime && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {new Date(record.punchInTime).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
-                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                        {record.duration} min
+                      <Badge variant="secondary" className={
+                        record.status === 'present' ? 'bg-emerald-100 text-emerald-700' :
+                          record.status === 'late' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                      }>
+                        {record.status}
                       </Badge>
-                      {record.biometricVerified && (
-                        <p className="text-xs text-muted-foreground mt-1">✓ Verified</p>
-                      )}
                     </div>
                   </div>
                 ))
@@ -196,9 +195,8 @@ export default function Attendance() {
               {achievements.map((achievement, index) => (
                 <div
                   key={index}
-                  className={`p-3 rounded-lg border ${
-                    achievement.earned ? 'border-primary-600 bg-primary-50 dark:bg-primary-950' : 'opacity-50'
-                  }`}
+                  className={`p-3 rounded-lg border ${achievement.earned ? 'border-primary-600 bg-primary-50 dark:bg-primary-950' : 'opacity-50'
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     <span className="text-2xl">{achievement.icon}</span>
@@ -228,23 +226,27 @@ export default function Attendance() {
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Visit Goal ({thisMonthVisits}/{monthlyGoal})</span>
+                <span className="text-sm font-medium">Visit Goal ({presentCount}/{monthlyGoal})</span>
                 <span className="text-sm text-muted-foreground">{Math.round(goalProgress)}%</span>
               </div>
               <Progress value={goalProgress} className="h-2" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t">
               <div className="text-center">
-                <p className="text-2xl font-bold text-primary-600">{thisMonthVisits}</p>
-                <p className="text-sm text-muted-foreground">Visits This Month</p>
+                <p className="text-2xl font-bold text-primary-600">{presentCount}</p>
+                <p className="text-sm text-muted-foreground">Present</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-emerald-600">{uniqueClubs.length}</p>
-                <p className="text-sm text-muted-foreground">Clubs Visited</p>
+                <p className="text-2xl font-bold text-yellow-600">{lateCount}</p>
+                <p className="text-sm text-muted-foreground">Late</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-orange-600">{avgDuration}</p>
-                <p className="text-sm text-muted-foreground">Avg Minutes/Visit</p>
+                <p className="text-2xl font-bold text-red-600">{absentCount}</p>
+                <p className="text-sm text-muted-foreground">Absent</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-emerald-600">{attendanceRate}%</p>
+                <p className="text-sm text-muted-foreground">Rate</p>
               </div>
             </div>
           </div>

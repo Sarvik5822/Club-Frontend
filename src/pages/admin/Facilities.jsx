@@ -9,7 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Plus, Edit, TrendingUp, Users, Clock, MapPin, Calendar, Shield } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Plus, Edit, TrendingUp, Users, Clock, MapPin, Calendar, Shield, ChevronsUpDown, Search, Loader2, Dumbbell } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import adminService from '@/services/adminService';
 import { FACILITY_TYPES, FACILITY_STATUS } from '@/lib/constants';
@@ -59,10 +61,199 @@ const getInitialFormState = () => ({
   }
 });
 
+// Helper: normalize sports array to always be [{ sportId, name }] format
+function normalizeSportsArray(sports) {
+  if (!Array.isArray(sports)) return [];
+  return sports.map((sport) => {
+    if (typeof sport === 'object' && sport !== null) {
+      // Could be { sportId, name } or { sportId: { _id, name }, name }
+      const sportId = sport.sportId?._id || sport.sportId || '';
+      const name = sport.name || sport.sportId?.name || '';
+      return { sportId, name };
+    }
+    // Legacy: plain string
+    return { sportId: '', name: sport };
+  });
+}
+
+// Multi-select sports component using Popover with checkboxes
+// selectedSports is now [{ sportId, name }] array
+function SportsMultiSelect({ selectedSports, onSportsChange, clubSports, loadingClubSports }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const normalizedSelected = normalizeSportsArray(selectedSports);
+
+  // Filter club sports based on search term
+  const filteredSports = clubSports.filter(sport =>
+    sport.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    sport.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Group filtered sports by category
+  const groupedSports = filteredSports.reduce((acc, sport) => {
+    if (!acc[sport.category]) acc[sport.category] = [];
+    acc[sport.category].push(sport);
+    return acc;
+  }, {});
+
+  const isSelected = (clubSport) => {
+    return normalizedSelected.some(
+      (s) => s.sportId === clubSport._id || s.name === clubSport.name
+    );
+  };
+
+  const handleToggleSport = (clubSport) => {
+    if (isSelected(clubSport)) {
+      // Remove
+      onSportsChange(
+        normalizedSelected.filter(
+          (s) => s.sportId !== clubSport._id && s.name !== clubSport.name
+        )
+      );
+    } else {
+      // Add with both sportId and name
+      onSportsChange([
+        ...normalizedSelected,
+        { sportId: clubSport._id, name: clubSport.name },
+      ]);
+    }
+  };
+
+  const handleRemoveSport = (sportItem) => {
+    onSportsChange(
+      normalizedSelected.filter(
+        (s) => !(s.sportId === sportItem.sportId && s.name === sportItem.name)
+      )
+    );
+  };
+
+  const selectedCount = normalizedSelected.length;
+
+  return (
+    <div className="space-y-2">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between h-auto min-h-[40px] font-normal"
+          >
+            <span className="text-left truncate">
+              {selectedCount > 0
+                ? `${selectedCount} sport${selectedCount > 1 ? 's' : ''} selected`
+                : 'Select sports/activities...'}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[350px] p-0" align="start">
+          <div className="p-3 border-b">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search sports..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-8 h-9"
+              />
+            </div>
+          </div>
+
+          <ScrollArea className="h-[280px]">
+            {loadingClubSports ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading sports...</span>
+              </div>
+            ) : clubSports.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                <Dumbbell className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground">No sports configured yet.</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Go to Sports & Activities page to add sports first.
+                </p>
+              </div>
+            ) : filteredSports.length === 0 ? (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-sm text-muted-foreground">No sports match &ldquo;{searchTerm}&rdquo;</p>
+              </div>
+            ) : (
+              <div className="p-2">
+                {Object.entries(groupedSports).map(([category, sports]) => (
+                  <div key={category} className="mb-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 py-1.5">
+                      {category}
+                    </p>
+                    {sports.map((sport) => {
+                      const checked = isSelected(sport);
+                      return (
+                        <div
+                          key={sport._id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer"
+                          onClick={() => handleToggleSport(sport)}
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => handleToggleSport(sport)}
+                            className="pointer-events-none"
+                          />
+                          <span className="text-sm flex-1">{sport.name}</span>
+                          {sport.description && (
+                            <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+                              {sport.description}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+
+          {selectedCount > 0 && (
+            <div className="border-t p-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-muted-foreground"
+                onClick={() => onSportsChange([])}
+              >
+                Clear all selections
+              </Button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {/* Show selected sports as badges - display sport name only */}
+      {selectedCount > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {normalizedSelected.map((sportItem, index) => (
+            <Badge
+              key={sportItem.sportId || sportItem.name || index}
+              variant="secondary"
+              className="text-xs cursor-pointer hover:bg-destructive/20 hover:text-destructive transition-colors"
+              onClick={() => handleRemoveSport(sportItem)}
+            >
+              {sportItem.name} ✕
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Facilities() {
   const { toast } = useToast();
   const [facilities, setFacilities] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [clubSports, setClubSports] = useState([]);
+  const [loadingClubSports, setLoadingClubSports] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -75,6 +266,8 @@ export default function Facilities() {
     fetchFacilities();
     // Branch fetch is optional - don't block page load if it fails
     fetchBranches();
+    // Fetch club sports for the multi-select dropdown
+    fetchClubSports();
   }, []);
 
   const fetchFacilities = async () => {
@@ -102,6 +295,23 @@ export default function Facilities() {
       // Silently handle error - branches dropdown will just be empty
       console.log('Branch fetch skipped:', error.message);
       setBranches([]);
+    }
+  };
+
+  const fetchClubSports = async () => {
+    try {
+      setLoadingClubSports(true);
+      const response = await adminService.getClubSports({ status: 'active' });
+      if (response.status === 'success') {
+        setClubSports(response.data.sports || []);
+      } else {
+        setClubSports(response?.data?.sports || []);
+      }
+    } catch (error) {
+      console.log('Club sports fetch skipped:', error.message);
+      setClubSports([]);
+    } finally {
+      setLoadingClubSports(false);
     }
   };
 
@@ -156,7 +366,18 @@ export default function Facilities() {
       saturday: facility.operatingHours?.saturday || { open: '07:00', close: '20:00' },
       sunday: facility.operatingHours?.sunday || { open: '07:00', close: '20:00' },
     };
-    setEditingFacility({ ...facility, operatingHours });
+    // Normalize sports to [{ sportId, name }] format for editing
+    const sports = Array.isArray(facility.sports)
+      ? facility.sports.map((sport) => {
+        if (typeof sport === 'object' && sport !== null) {
+          const sportId = sport.sportId?._id || sport.sportId || '';
+          const name = sport.name || sport.sportId?.name || '';
+          return { sportId, name };
+        }
+        return { sportId: '', name: sport };
+      })
+      : [];
+    setEditingFacility({ ...facility, operatingHours, sports });
     setShowEditModal(true);
   };
 
@@ -225,7 +446,7 @@ export default function Facilities() {
   };
 
   // Render form fields (reusable for Add and Edit)
-  const renderFormFields = (formData, setFormData, isEdit = false) => (
+  const renderFormFields = (formData, setFormData) => (
     <Tabs defaultValue="basic" className="w-full">
       <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="basic">Basic Info</TabsTrigger>
@@ -342,12 +563,16 @@ export default function Facilities() {
       {/* Details Tab */}
       <TabsContent value="details" className="space-y-4 mt-4">
         <div className="space-y-2">
-          <Label>Sports/Activities (comma separated)</Label>
-          <Input
-            placeholder="Yoga, Pilates, Meditation"
-            value={Array.isArray(formData.sports) ? formData.sports.join(', ') : ''}
-            onChange={(e) => setFormData({ ...formData, sports: e.target.value.split(',').map(s => s.trim()).filter(s => s) })}
+          <Label>Sports/Activities</Label>
+          <SportsMultiSelect
+            selectedSports={formData.sports}
+            onSportsChange={(sports) => setFormData({ ...formData, sports })}
+            clubSports={clubSports}
+            loadingClubSports={loadingClubSports}
           />
+          <p className="text-xs text-muted-foreground">
+            Select the sports and activities available at this facility. Only active sports from your club are shown.
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -381,7 +606,7 @@ export default function Facilities() {
         <div className="space-y-2">
           <Label>Image URL</Label>
           <Input
-            placeholder="/images/photo1770984360.jpg"
+            placeholder="/images/ImageUpload.jpg"
             value={formData.imageUrl || ''}
             onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
           />
@@ -541,7 +766,9 @@ export default function Facilities() {
                   <p className="text-sm text-muted-foreground mb-2">Sports/Activities</p>
                   <div className="flex flex-wrap gap-1">
                     {facility.sports.map((sport, i) => (
-                      <Badge key={i} variant="outline" className="text-xs">{sport}</Badge>
+                      <Badge key={i} variant="outline" className="text-xs">
+                        {typeof sport === 'object' ? sport.name : sport}
+                      </Badge>
                     ))}
                   </div>
                 </div>
@@ -601,7 +828,7 @@ export default function Facilities() {
           </DialogHeader>
           {editingFacility && (
             <div className="py-4">
-              {renderFormFields(editingFacility, setEditingFacility, true)}
+              {renderFormFields(editingFacility, setEditingFacility)}
             </div>
           )}
           <DialogFooter>

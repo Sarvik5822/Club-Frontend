@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Search, CheckCircle, X, Eye, Plus, Edit, Trash2 } from 'lucide-react';
+import { Search, Eye, Plus, Edit, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import adminService from '@/services/adminService';
 
@@ -28,7 +28,12 @@ export default function Coaches() {
     specializations: [],
     certifications: [],
     bio: '',
-    hourlyRate: 0
+    address: '',
+    emergencyContact: {
+      name: '',
+      phone: '',
+      relationship: ''
+    }
   });
 
   useEffect(() => {
@@ -84,7 +89,12 @@ export default function Coaches() {
         specializations: [],
         certifications: [],
         bio: '',
-        hourlyRate: 0
+        address: '',
+        emergencyContact: {
+          name: '',
+          phone: '',
+          relationship: ''
+        }
       });
       fetchCoaches();
     } catch (error) {
@@ -97,7 +107,10 @@ export default function Coaches() {
   };
 
   const handleEditCoach = (coach) => {
-    setEditingCoach(coach);
+    setEditingCoach({
+      ...coach,
+      emergencyContact: coach.emergencyContact || { name: '', phone: '', relationship: '' }
+    });
     setShowEditModal(true);
   };
 
@@ -182,7 +195,7 @@ export default function Coaches() {
                   <th className="text-left p-3 font-semibold">Coach</th>
                   <th className="text-left p-3 font-semibold">Specializations</th>
                   <th className="text-left p-3 font-semibold">Rating</th>
-                  <th className="text-left p-3 font-semibold">Rate</th>
+                  <th className="text-left p-3 font-semibold">Sessions</th>
                   <th className="text-left p-3 font-semibold">Status</th>
                   <th className="text-right p-3 font-semibold">Actions</th>
                 </tr>
@@ -216,10 +229,12 @@ export default function Coaches() {
                     <td className="p-3">
                       <div className="flex items-center gap-1">
                         <span className="font-semibold">{coach.rating || 'N/A'}</span>
-                        {coach.rating && <span className="text-yellow-500">★</span>}
+                        {coach.rating > 0 && <span className="text-yellow-500">★</span>}
                       </div>
                     </td>
-                    <td className="p-3">₹{coach.hourlyRate || 0}/hr</td>
+                    <td className="p-3">
+                      <span className="text-sm">{coach.totalSessions || 0}</span>
+                    </td>
                     <td className="p-3">
                       <Badge variant={coach.status === 'active' ? 'default' : 'secondary'}>
                         {coach.status || 'active'}
@@ -248,7 +263,7 @@ export default function Coaches() {
 
       {/* View Coach Details Modal */}
       <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Coach Details</DialogTitle>
           </DialogHeader>
@@ -264,26 +279,48 @@ export default function Coaches() {
                   <h3 className="text-xl font-semibold">{selectedCoach.name}</h3>
                   <p className="text-muted-foreground">{selectedCoach.email}</p>
                   <p className="text-sm text-muted-foreground">{selectedCoach.phone}</p>
+                  <Badge variant={selectedCoach.status === 'active' ? 'default' : 'secondary'} className="mt-1">
+                    {selectedCoach.status || 'active'}
+                  </Badge>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 p-4 border rounded-lg">
                 <div>
                   <p className="text-sm text-muted-foreground">Rating</p>
-                  <p className="font-semibold">{selectedCoach.rating || 'N/A'} ★</p>
+                  <p className="font-semibold">{selectedCoach.rating || 'N/A'} {selectedCoach.rating > 0 && '★'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Hourly Rate</p>
-                  <p className="font-semibold">₹{selectedCoach.hourlyRate || 0}</p>
+                  <p className="text-sm text-muted-foreground">Total Sessions</p>
+                  <p className="font-semibold">{selectedCoach.totalSessions || 0}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Approval Status</p>
+                  <p className="font-semibold capitalize">{selectedCoach.approvalStatus || 'approved'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Branch</p>
+                  <p className="font-semibold">{selectedCoach.branchId?.name || 'Not assigned'}</p>
                 </div>
               </div>
+
+              {selectedCoach.address && (
+                <div>
+                  <h4 className="font-semibold mb-2">Address</h4>
+                  <p className="text-sm text-muted-foreground">{selectedCoach.address}</p>
+                </div>
+              )}
 
               <div>
                 <h4 className="font-semibold mb-2">Specializations</h4>
                 <div className="flex flex-wrap gap-2">
-                  {selectedCoach.specializations?.map((spec, i) => (
-                    <Badge key={i} variant="secondary">{spec}</Badge>
-                  ))}
+                  {selectedCoach.specializations?.length > 0 ? (
+                    selectedCoach.specializations.map((spec, i) => (
+                      <Badge key={i} variant="secondary">{spec}</Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No specializations added</p>
+                  )}
                 </div>
               </div>
 
@@ -304,6 +341,26 @@ export default function Coaches() {
                   <p className="text-sm text-muted-foreground">{selectedCoach.bio}</p>
                 </div>
               )}
+
+              {selectedCoach.emergencyContact && (selectedCoach.emergencyContact.name || selectedCoach.emergencyContact.phone) && (
+                <div>
+                  <h4 className="font-semibold mb-2">Emergency Contact</h4>
+                  <div className="grid grid-cols-3 gap-4 p-4 border rounded-lg">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Name</p>
+                      <p className="font-semibold">{selectedCoach.emergencyContact.name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Phone</p>
+                      <p className="font-semibold">{selectedCoach.emergencyContact.phone || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Relationship</p>
+                      <p className="font-semibold">{selectedCoach.emergencyContact.relationship || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -316,33 +373,33 @@ export default function Coaches() {
 
       {/* Add Coach Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Coach</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Name</Label>
+                <Label>Name *</Label>
                 <Input
                   value={newCoach.name}
                   onChange={(e) => setNewCoach({ ...newCoach, name: e.target.value })}
-                  placeholder="John Doe"
+                  placeholder="Deepak Verma"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Email</Label>
+                <Label>Email *</Label>
                 <Input
                   type="email"
                   value={newCoach.email}
                   onChange={(e) => setNewCoach({ ...newCoach, email: e.target.value })}
-                  placeholder="coach@example.com"
+                  placeholder="coach@sportsclub.com"
                 />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Password</Label>
+                <Label>Password *</Label>
                 <Input
                   type="password"
                   value={newCoach.password}
@@ -355,25 +412,24 @@ export default function Coaches() {
                 <Input
                   value={newCoach.phone}
                   onChange={(e) => setNewCoach({ ...newCoach, phone: e.target.value })}
-                  placeholder="+919876543210"
+                  placeholder="+91 98111 22334"
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Hourly Rate (₹)</Label>
-              <Input
-                type="number"
-                value={newCoach.hourlyRate}
-                onChange={(e) => setNewCoach({ ...newCoach, hourlyRate: parseInt(e.target.value) })}
-                placeholder="1000"
-              />
             </div>
             <div className="space-y-2">
               <Label>Specializations (comma separated)</Label>
               <Input
                 value={newCoach.specializations.join(', ')}
-                onChange={(e) => setNewCoach({ ...newCoach, specializations: e.target.value.split(',').map(s => s.trim()) })}
-                placeholder="Swimming, Tennis, Yoga"
+                onChange={(e) => setNewCoach({ ...newCoach, specializations: e.target.value.split(',').map(s => s.trim()).filter(s => s) })}
+                placeholder="Basketball, Strength Training, Swimming"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Certifications (comma separated)</Label>
+              <Input
+                value={newCoach.certifications.join(', ')}
+                onChange={(e) => setNewCoach({ ...newCoach, certifications: e.target.value.split(',').map(s => s.trim()).filter(s => s) })}
+                placeholder="NSCA-CPT, ACE Certified Personal Trainer"
               />
             </div>
             <div className="space-y-2">
@@ -381,9 +437,57 @@ export default function Coaches() {
               <Textarea
                 value={newCoach.bio}
                 onChange={(e) => setNewCoach({ ...newCoach, bio: e.target.value })}
-                placeholder="Brief bio about the coach..."
+                placeholder="10+ years experience in coaching..."
                 rows={3}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Address</Label>
+              <Input
+                value={newCoach.address}
+                onChange={(e) => setNewCoach({ ...newCoach, address: e.target.value })}
+                placeholder="22, Lokhandwala Complex, Andheri West, Mumbai 400053"
+              />
+            </div>
+
+            {/* Emergency Contact Section */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Emergency Contact</Label>
+              <div className="grid grid-cols-3 gap-4 p-4 border rounded-lg">
+                <div className="space-y-2">
+                  <Label className="text-sm">Name</Label>
+                  <Input
+                    value={newCoach.emergencyContact.name}
+                    onChange={(e) => setNewCoach({
+                      ...newCoach,
+                      emergencyContact: { ...newCoach.emergencyContact, name: e.target.value }
+                    })}
+                    placeholder="Sunita Verma"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Phone</Label>
+                  <Input
+                    value={newCoach.emergencyContact.phone}
+                    onChange={(e) => setNewCoach({
+                      ...newCoach,
+                      emergencyContact: { ...newCoach.emergencyContact, phone: e.target.value }
+                    })}
+                    placeholder="+91 98111 22335"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm">Relationship</Label>
+                  <Input
+                    value={newCoach.emergencyContact.relationship}
+                    onChange={(e) => setNewCoach({
+                      ...newCoach,
+                      emergencyContact: { ...newCoach.emergencyContact, relationship: e.target.value }
+                    })}
+                    placeholder="Spouse"
+                  />
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -395,7 +499,7 @@ export default function Coaches() {
 
       {/* Edit Coach Modal */}
       <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Coach</DialogTitle>
           </DialogHeader>
@@ -418,11 +522,17 @@ export default function Coaches() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Hourly Rate (₹)</Label>
+                <Label>Specializations (comma separated)</Label>
                 <Input
-                  type="number"
-                  value={editingCoach.hourlyRate}
-                  onChange={(e) => setEditingCoach({ ...editingCoach, hourlyRate: parseInt(e.target.value) })}
+                  value={editingCoach.specializations?.join(', ') || ''}
+                  onChange={(e) => setEditingCoach({ ...editingCoach, specializations: e.target.value.split(',').map(s => s.trim()).filter(s => s) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Certifications (comma separated)</Label>
+                <Input
+                  value={editingCoach.certifications?.join(', ') || ''}
+                  onChange={(e) => setEditingCoach({ ...editingCoach, certifications: e.target.value.split(',').map(s => s.trim()).filter(s => s) })}
                 />
               </div>
               <div className="space-y-2">
@@ -432,6 +542,50 @@ export default function Coaches() {
                   onChange={(e) => setEditingCoach({ ...editingCoach, bio: e.target.value })}
                   rows={3}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label>Address</Label>
+                <Input
+                  value={editingCoach.address || ''}
+                  onChange={(e) => setEditingCoach({ ...editingCoach, address: e.target.value })}
+                />
+              </div>
+
+              {/* Emergency Contact Section */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">Emergency Contact</Label>
+                <div className="grid grid-cols-3 gap-4 p-4 border rounded-lg">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Name</Label>
+                    <Input
+                      value={editingCoach.emergencyContact?.name || ''}
+                      onChange={(e) => setEditingCoach({
+                        ...editingCoach,
+                        emergencyContact: { ...editingCoach.emergencyContact, name: e.target.value }
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Phone</Label>
+                    <Input
+                      value={editingCoach.emergencyContact?.phone || ''}
+                      onChange={(e) => setEditingCoach({
+                        ...editingCoach,
+                        emergencyContact: { ...editingCoach.emergencyContact, phone: e.target.value }
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Relationship</Label>
+                    <Input
+                      value={editingCoach.emergencyContact?.relationship || ''}
+                      onChange={(e) => setEditingCoach({
+                        ...editingCoach,
+                        emergencyContact: { ...editingCoach.emergencyContact, relationship: e.target.value }
+                      })}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

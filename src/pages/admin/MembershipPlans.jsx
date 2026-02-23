@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Edit, Trash2, Check, Loader2, RefreshCw, CreditCard, Users, Building2, Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Plus, Edit, Trash2, Check, Loader2, RefreshCw, CreditCard, Users, Building2, Info, Dumbbell, Sparkles } from 'lucide-react';
 import adminService from '@/services/adminService';
 import { toast } from 'sonner';
 
@@ -22,6 +23,7 @@ export default function MembershipPlans() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [submitting, setSubmitting] = useState(false);
+    const [expandedFacilities, setExpandedFacilities] = useState({});
 
     const [formData, setFormData] = useState({
         name: '',
@@ -228,6 +230,13 @@ export default function MembershipPlans() {
         }));
     };
 
+    const toggleExpandedFacility = (planId) => {
+        setExpandedFacilities(prev => ({
+            ...prev,
+            [planId]: !prev[planId]
+        }));
+    };
+
     const getColorClass = (color) => {
         const colorMap = {
             blue: 'bg-blue-500',
@@ -244,6 +253,93 @@ export default function MembershipPlans() {
     const totalPlans = plans.length;
     const activePlans = plans.filter(p => p.isActive !== false).length;
     const totalSubscribers = plans.reduce((sum, p) => sum + (p.subscriberCount || 0), 0);
+
+    // Render facility details with sports and amenities for a plan card
+    const renderFacilityDetails = (plan) => {
+        const facilityDetails = plan.facilityDetails || [];
+        const facilityNames = plan.facilities || [];
+        const isExpanded = expandedFacilities[plan._id];
+
+        // If no facilityDetails from backend, fall back to simple display
+        if (facilityDetails.length === 0 && facilityNames.length === 0) return null;
+
+        // Use facilityDetails if available, otherwise fallback to facility names
+        const displayFacilities = facilityDetails.length > 0 ? facilityDetails : facilityNames.map(name => ({ name, sports: [], amenities: [] }));
+        const visibleFacilities = isExpanded ? displayFacilities : displayFacilities.slice(0, 2);
+
+        return (
+            <div className="pt-2 border-t">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Included Facilities:</p>
+                <div className="space-y-2">
+                    {visibleFacilities.map((facility, i) => {
+                        const facName = typeof facility === 'string' ? facility : facility.name;
+                        const sports = typeof facility === 'object' ? (facility.sports || []) : [];
+                        const amenities = typeof facility === 'object' ? (facility.amenities || []) : [];
+                        const hasSportsOrAmenities = sports.length > 0 || amenities.length > 0;
+
+                        return (
+                            <div key={i} className="bg-muted/50 rounded-lg p-2.5">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <Building2 className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                                    <span className="text-sm font-medium">{facName}</span>
+                                    {facility.type && (
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 ml-auto capitalize">
+                                            {facility.type}
+                                        </Badge>
+                                    )}
+                                </div>
+
+                                {hasSportsOrAmenities && (
+                                    <div className="ml-5 space-y-1.5">
+                                        {sports.length > 0 && (
+                                            <div>
+                                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1 flex items-center gap-1">
+                                                    <Dumbbell className="h-2.5 w-2.5" />
+                                                    Sports
+                                                </p>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {sports.map((sport, si) => (
+                                                        <Badge key={si} variant="secondary" className="text-[10px] px-1.5 py-0">
+                                                            {sport.name}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {amenities.length > 0 && (
+                                            <div>
+                                                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1 flex items-center gap-1">
+                                                    <Sparkles className="h-2.5 w-2.5" />
+                                                    Amenities
+                                                </p>
+                                                <div className="flex flex-wrap gap-1">
+                                                    {amenities.map((amenity, ai) => (
+                                                        <Badge key={ai} variant="outline" className="text-[10px] px-1.5 py-0">
+                                                            {amenity}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+                {displayFacilities.length > 2 && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full mt-1 text-xs h-7"
+                        onClick={() => toggleExpandedFacility(plan._id)}
+                    >
+                        {isExpanded ? 'Show Less' : `+${displayFacilities.length - 2} more facilities`}
+                    </Button>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="space-y-6">
@@ -373,7 +469,7 @@ export default function MembershipPlans() {
                                 <div className="space-y-2">
                                     <Label>Features (one per line)</Label>
                                     <Textarea
-                                        placeholder="Access to gym equipment&#10;Swimming pool access&#10;Personal training sessions"
+                                        placeholder={"Access to gym equipment\nSwimming pool access\nPersonal training sessions"}
                                         rows={4}
                                         value={formData.features}
                                         onChange={(e) => setFormData(prev => ({ ...prev, features: e.target.value }))}
@@ -383,16 +479,41 @@ export default function MembershipPlans() {
                                     <Label>Included Facilities</Label>
                                     <div className="flex flex-wrap gap-2">
                                         {facilities.map(facility => (
-                                            <Badge
-                                                key={facility._id}
-                                                variant={formData.facilities.includes(facility.name) ? "default" : "outline"}
-                                                className="cursor-pointer"
-                                                onClick={() => toggleFacility(facility.name)}
-                                            >
-                                                {facility.name}
-                                            </Badge>
+                                            <TooltipProvider key={facility._id}>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Badge
+                                                            variant={formData.facilities.includes(facility.name) ? "default" : "outline"}
+                                                            className="cursor-pointer"
+                                                            onClick={() => toggleFacility(facility.name)}
+                                                        >
+                                                            {facility.name}
+                                                        </Badge>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="bottom" className="max-w-xs">
+                                                        <div className="text-xs space-y-1">
+                                                            {facility.sports && facility.sports.length > 0 && (
+                                                                <div>
+                                                                    <span className="font-semibold">Sports: </span>
+                                                                    {facility.sports.map(s => typeof s === 'object' ? s.name : s).join(', ')}
+                                                                </div>
+                                                            )}
+                                                            {facility.amenities && facility.amenities.length > 0 && (
+                                                                <div>
+                                                                    <span className="font-semibold">Amenities: </span>
+                                                                    {facility.amenities.join(', ')}
+                                                                </div>
+                                                            )}
+                                                            {(!facility.sports || facility.sports.length === 0) && (!facility.amenities || facility.amenities.length === 0) && (
+                                                                <span>No sports or amenities configured</span>
+                                                            )}
+                                                        </div>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         ))}
                                     </div>
+                                    <p className="text-xs text-muted-foreground">Hover over a facility to see its sports & amenities</p>
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center space-x-2">
@@ -435,7 +556,7 @@ export default function MembershipPlans() {
                         <div>
                             <h3 className="font-semibold text-lg">Member Facility Plans (Club-Specific)</h3>
                             <p className="text-muted-foreground text-sm mt-1">
-                                These plans define what facilities and services your members can access at your club. They control access to amenities like gym, pool, courts, classes, and other member benefits.
+                                These plans define what facilities and services your members can access at your club. They control access to amenities like gym, pool, courts, classes, and other member benefits. Each facility shows its associated sports and amenities.
                             </p>
                             <div className="flex gap-4 mt-3">
                                 <div className="flex items-center gap-2 text-sm">
@@ -445,6 +566,10 @@ export default function MembershipPlans() {
                                 <div className="flex items-center gap-2 text-sm">
                                     <Users className="h-4 w-4 text-blue-500" />
                                     <span>Member facility access</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm">
+                                    <Dumbbell className="h-4 w-4 text-purple-500" />
+                                    <span>Sports & Amenities included</span>
                                 </div>
                             </div>
                         </div>
@@ -545,19 +670,8 @@ export default function MembershipPlans() {
                                         )}
                                     </div>
 
-                                    {plan.facilities?.length > 0 && (
-                                        <div className="pt-2 border-t">
-                                            <p className="text-xs text-muted-foreground mb-2">Included Facilities:</p>
-                                            <div className="flex flex-wrap gap-1">
-                                                {plan.facilities.slice(0, 3).map((facility, i) => (
-                                                    <Badge key={i} variant="outline" className="text-xs">{facility}</Badge>
-                                                ))}
-                                                {plan.facilities.length > 3 && (
-                                                    <Badge variant="outline" className="text-xs">+{plan.facilities.length - 3}</Badge>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
+                                    {/* Facility Details with Sports & Amenities */}
+                                    {renderFacilityDetails(plan)}
 
                                     <div className="pt-4 border-t space-y-2">
                                         <div className="flex justify-between text-sm">
@@ -695,7 +809,7 @@ export default function MembershipPlans() {
                         <div className="space-y-2">
                             <Label>Features (one per line)</Label>
                             <Textarea
-                                placeholder="Access to gym equipment&#10;Swimming pool access&#10;Personal training sessions"
+                                placeholder={"Access to gym equipment\nSwimming pool access\nPersonal training sessions"}
                                 rows={4}
                                 value={formData.features}
                                 onChange={(e) => setFormData(prev => ({ ...prev, features: e.target.value }))}
@@ -705,16 +819,41 @@ export default function MembershipPlans() {
                             <Label>Included Facilities</Label>
                             <div className="flex flex-wrap gap-2">
                                 {facilities.map(facility => (
-                                    <Badge
-                                        key={facility._id}
-                                        variant={formData.facilities.includes(facility.name) ? "default" : "outline"}
-                                        className="cursor-pointer"
-                                        onClick={() => toggleFacility(facility.name)}
-                                    >
-                                        {facility.name}
-                                    </Badge>
+                                    <TooltipProvider key={facility._id}>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Badge
+                                                    variant={formData.facilities.includes(facility.name) ? "default" : "outline"}
+                                                    className="cursor-pointer"
+                                                    onClick={() => toggleFacility(facility.name)}
+                                                >
+                                                    {facility.name}
+                                                </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" className="max-w-xs">
+                                                <div className="text-xs space-y-1">
+                                                    {facility.sports && facility.sports.length > 0 && (
+                                                        <div>
+                                                            <span className="font-semibold">Sports: </span>
+                                                            {facility.sports.map(s => typeof s === 'object' ? s.name : s).join(', ')}
+                                                        </div>
+                                                    )}
+                                                    {facility.amenities && facility.amenities.length > 0 && (
+                                                        <div>
+                                                            <span className="font-semibold">Amenities: </span>
+                                                            {facility.amenities.join(', ')}
+                                                        </div>
+                                                    )}
+                                                    {(!facility.sports || facility.sports.length === 0) && (!facility.amenities || facility.amenities.length === 0) && (
+                                                        <span>No sports or amenities configured</span>
+                                                    )}
+                                                </div>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
                                 ))}
                             </div>
+                            <p className="text-xs text-muted-foreground">Hover over a facility to see its sports & amenities</p>
                         </div>
                         <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2">

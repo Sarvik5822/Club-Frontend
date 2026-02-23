@@ -183,10 +183,10 @@ export const superadminService = {
   // ==================== ANNOUNCEMENTS ====================
   getAnnouncements: (params = {}) => {
     const queryString = new URLSearchParams(params).toString();
-    return api.get(`/superadmin/announcementRoutes${queryString ? `?${queryString}` : ''}`);
+    return api.get(`/superadmin/announcementRoutes/getAllAnnouncements${queryString ? `?${queryString}` : ''}`);
   },
 
-  getAnnouncementStats: () => api.get('/superadmin/announcementRoutes/stats'),
+  getAnnouncementStats: () => api.get('/superadmin/announcementRoutes/getAnnouncementStats'),
 
   // ==================== EVENTS ====================
   getEvents: (params = {}) => {

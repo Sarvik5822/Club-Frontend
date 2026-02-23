@@ -6,10 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Bell, Calendar, User, Search, RefreshCw, ChevronLeft, ChevronRight, Paperclip } from 'lucide-react';
-import memberService from '@/services/memberService';
+import coachService from '@/services/coachService';
 import { toast } from 'sonner';
 
-export default function Announcements() {
+export default function CoachAnnouncements() {
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,10 +23,10 @@ export default function Announcements() {
   const fetchAnnouncements = async (currentPage = 1) => {
     try {
       setLoading(true);
-      const res = await memberService.getAnnouncements({ page: currentPage, limit: LIMIT });
+      const res = await coachService.getAnnouncements({ page: currentPage, limit: LIMIT });
       setAnnouncements(res.data?.announcements || []);
-      setTotalPages(res.pages || 1);
-      setTotal(res.total || 0);
+      setTotalPages(res.data?.totalPages || res.pages || 1);
+      setTotal(res.data?.total || res.total || 0);
     } catch (error) {
       toast.error('Failed to load announcements: ' + error.message);
     } finally {
@@ -38,13 +38,8 @@ export default function Announcements() {
     fetchAnnouncements(page);
   }, [page]);
 
-  const handleViewDetail = async (announcement) => {
-    try {
-      const res = await memberService.getAnnouncementById(announcement._id);
-      setSelectedAnnouncement(res.data?.announcement || announcement);
-    } catch {
-      setSelectedAnnouncement(announcement);
-    }
+  const handleViewDetail = (announcement) => {
+    setSelectedAnnouncement(announcement);
     setShowDetailModal(true);
   };
 
@@ -70,7 +65,7 @@ export default function Announcements() {
     if (Array.isArray(audience)) {
       return audience.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ');
     }
-    return String(audience).charAt(0).toUpperCase() + String(audience).slice(1);
+    return audience;
   };
 
   return (
@@ -151,10 +146,10 @@ export default function Announcements() {
                       <div>
                         <CardTitle className="text-base">{announcement.title}</CardTitle>
                         <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground flex-wrap">
-                          {(announcement.author || announcement.authorId?.name || announcement.createdBy?.name) && (
+                          {(announcement.author || announcement.authorId?.name) && (
                             <span className="flex items-center gap-1">
                               <User className="h-3 w-3" />
-                              {announcement.author || announcement.authorId?.name || announcement.createdBy?.name || 'Admin'}
+                              {announcement.author || announcement.authorId?.name || 'Admin'}
                             </span>
                           )}
                           <span className="flex items-center gap-1">
@@ -178,7 +173,6 @@ export default function Announcements() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-muted-foreground line-clamp-2">{announcement.content}</p>
-
                   {/* Show attachments count if any */}
                   {announcement.attachments && announcement.attachments.length > 0 && (
                     <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
@@ -256,9 +250,9 @@ export default function Announcements() {
                     For: {getAudienceLabel(selectedAnnouncement.targetAudience)}
                   </Badge>
                 )}
-                {(selectedAnnouncement.author || selectedAnnouncement.authorId?.name || selectedAnnouncement.createdBy?.name) && (
+                {(selectedAnnouncement.author || selectedAnnouncement.authorId?.name) && (
                   <Badge variant="secondary">
-                    By: {selectedAnnouncement.author || selectedAnnouncement.authorId?.name || selectedAnnouncement.createdBy?.name}
+                    By: {selectedAnnouncement.author || selectedAnnouncement.authorId?.name}
                   </Badge>
                 )}
               </div>

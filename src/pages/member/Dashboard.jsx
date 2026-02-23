@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar, Clock, MapPin, Fingerprint, LogIn, LogOut, TrendingUp, Award, Building, Plus, X, Loader2 } from 'lucide-react';
-import { mockAttendanceRecords, mockActiveSession, mockNotifications, mockFacilities } from '@/lib/mockData';
 import { useAuth } from '@/lib/auth';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -14,8 +13,15 @@ import memberService from '@/services/memberService';
 export default function MemberDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [isPunchedIn, setIsPunchedIn] = useState(mockActiveSession !== null);
-  const [currentSession, setCurrentSession] = useState(mockActiveSession);
+
+  // Dashboard data from API
+  const [dashboardData, setDashboardData] = useState(null);
+  const [facilities, setFacilities] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Punch in/out state
+  const [isPunchedIn, setIsPunchedIn] = useState(false);
+  const [currentSession, setCurrentSession] = useState(null);
   const [showPunchInModal, setShowPunchInModal] = useState(false);
   const [selectedFacility, setSelectedFacility] = useState('');
 
@@ -29,11 +35,44 @@ export default function MemberDashboard() {
   const [joinMessage, setJoinMessage] = useState('');
   const [submittingJoin, setSubmittingJoin] = useState(false);
 
+  // Fetch dashboard data from API
+  const fetchDashboard = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await memberService.getDashboard();
+      if (response.status === 'success') {
+        setDashboardData(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard:', error);
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch facilities from API
+  const fetchFacilities = useCallback(async () => {
+    try {
+      const response = await memberService.getFacilities();
+      if (response.status === 'success') {
+        setFacilities(response.data.facilities || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch facilities:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboard();
+    fetchFacilities();
+  }, [fetchDashboard, fetchFacilities]);
+
   const fetchAvailableClubs = async () => {
     try {
       setClubsLoading(true);
       const response = await memberService.getAvailableClubs();
-      setAvailableClubs(response.data.clubs || []);
+      setAvailableClubs(response.data?.clubs || []);
     } catch (error) {
       console.error('Failed to fetch clubs:', error);
     } finally {
@@ -45,7 +84,7 @@ export default function MemberDashboard() {
     try {
       setJoinRequestsLoading(true);
       const response = await memberService.getMyJoinRequests();
-      setMyJoinRequests(response.data.requests || []);
+      setMyJoinRequests(response.data?.requests || []);
     } catch (error) {
       console.error('Failed to fetch join requests:', error);
     } finally {
@@ -90,58 +129,38 @@ export default function MemberDashboard() {
     }
   };
 
-  // Get user's recent attendance
-  const recentAttendance = mockAttendanceRecords
-    .filter(record => record.memberId === user?.id)
-    .slice(0, 5);
-
-  // Calculate stats
-  const thisWeekRecords = mockAttendanceRecords.filter(record => {
-    const recordDate = new Date(record.date);
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    return record.memberId === user?.id && recordDate >= weekAgo;
-  });
-
-  const thisMonthRecords = mockAttendanceRecords.filter(record => {
-    const recordDate = new Date(record.date);
-    const monthAgo = new Date();
-    monthAgo.setDate(monthAgo.getDate() - 30);
-    return record.memberId === user?.id && recordDate >= monthAgo;
-  });
-
-  const totalHoursThisWeek = thisWeekRecords.reduce((sum, record) => sum + record.duration, 0);
-  const totalHoursThisMonth = thisMonthRecords.reduce((sum, record) => sum + record.duration, 0);
-
-  const lastVisit = recentAttendance.length > 0 ? recentAttendance[0] : null;
+  // Extract stats from API data
+  const member = dashboardData?.member;
+  const apiStats = dashboardData?.stats;
+  const recentPayments = dashboardData?.recentPayments || [];
 
   const stats = [
     {
-      label: 'Visits This Week',
-      value: thisWeekRecords.length.toString(),
+      label: 'Total Attendance',
+      value: apiStats?.totalAttendance?.toString() || '0',
       icon: Calendar,
-      trend: `${totalHoursThisWeek} minutes total`,
+      trend: `${apiStats?.attendanceRate || 0}% rate`,
       color: 'text-emerald-600'
     },
     {
-      label: 'Visits This Month',
-      value: thisMonthRecords.length.toString(),
+      label: 'Present Count',
+      value: apiStats?.presentCount?.toString() || '0',
       icon: TrendingUp,
-      trend: `${totalHoursThisMonth} minutes total`,
+      trend: 'Sessions attended',
       color: 'text-blue-600'
     },
     {
-      label: 'Last Visit',
-      value: lastVisit ? new Date(lastVisit.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A',
+      label: 'Attendance Rate',
+      value: `${apiStats?.attendanceRate || 0}%`,
       icon: Clock,
-      trend: lastVisit ? `${lastVisit.duration} minutes` : 'No visits yet',
+      trend: 'Overall rate',
       color: 'text-orange-600'
     },
     {
-      label: 'Current Streak',
-      value: '5 days',
+      label: 'Active Plans',
+      value: apiStats?.activePlans?.toString() || '0',
       icon: Award,
-      trend: 'Keep it up!',
+      trend: 'Training plans',
       color: 'text-purple-600'
     },
   ];
@@ -150,65 +169,87 @@ export default function MemberDashboard() {
     setShowPunchInModal(true);
   };
 
-  const confirmPunchIn = () => {
+  const confirmPunchIn = async () => {
     if (!selectedFacility) {
       toast.error('Please select a facility');
       return;
     }
 
-    const newSession = {
-      memberId: user?.id,
-      clubName: 'Downtown Sports Hub',
-      punchInTime: new Date().toISOString(),
-      facility: selectedFacility,
-    };
-
-    setCurrentSession(newSession);
-    setIsPunchedIn(true);
-    setShowPunchInModal(false);
-    toast.success(`Punched in at ${selectedFacility}`, {
-      description: 'Have a great workout!',
-    });
+    try {
+      await memberService.punchIn({ facility: selectedFacility });
+      const newSession = {
+        punchInTime: new Date().toISOString(),
+        facility: selectedFacility,
+      };
+      setCurrentSession(newSession);
+      setIsPunchedIn(true);
+      setShowPunchInModal(false);
+      toast.success(`Punched in at ${selectedFacility}`, {
+        description: 'Have a great workout!',
+      });
+      fetchDashboard();
+    } catch (error) {
+      toast.error(error.message || 'Failed to punch in');
+    }
   };
 
-  const handlePunchOut = () => {
+  const handlePunchOut = async () => {
     if (!currentSession) return;
 
-    const punchOutTime = new Date();
-    const punchInTime = new Date(currentSession.punchInTime);
-    const duration = Math.round((punchOutTime - punchInTime) / 60000); // minutes
+    try {
+      await memberService.punchOut({});
+      const punchOutTime = new Date();
+      const punchInTime = new Date(currentSession.punchInTime);
+      const duration = Math.round((punchOutTime - punchInTime) / 60000);
 
-    toast.success('Punched out successfully', {
-      description: `Session duration: ${duration} minutes`,
-    });
+      toast.success('Punched out successfully', {
+        description: `Session duration: ${duration} minutes`,
+      });
 
-    setIsPunchedIn(false);
-    setCurrentSession(null);
+      setIsPunchedIn(false);
+      setCurrentSession(null);
+      fetchDashboard();
+    } catch (error) {
+      toast.error(error.message || 'Failed to punch out');
+    }
   };
 
   const getElapsedTime = () => {
     if (!currentSession) return '0:00';
     const now = new Date();
     const punchIn = new Date(currentSession.punchInTime);
-    const diff = Math.floor((now - punchIn) / 1000); // seconds
+    const diff = Math.floor((now - punchIn) / 1000);
     const hours = Math.floor(diff / 3600);
     const minutes = Math.floor((diff % 3600) / 60);
     return `${hours}:${minutes.toString().padStart(2, '0')}`;
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+        <span className="ml-2 text-muted-foreground">Loading dashboard...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Welcome back, {user?.name}!</h1>
+          <h1 className="text-3xl font-bold">Welcome back, {member?.name || user?.name}!</h1>
           <p className="text-muted-foreground mt-1">Track your club visits and stay active</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge className="bg-yellow-500 text-white">
-            Gold Member
+            {member?.membershipStatus || 'Active'} Member
           </Badge>
-          <span className="text-sm text-muted-foreground">Expires: Dec 31, 2026</span>
+          {member?.membershipEndDate && (
+            <span className="text-sm text-muted-foreground">
+              Expires: {new Date(member.membershipEndDate).toLocaleDateString()}
+            </span>
+          )}
         </div>
       </div>
 
@@ -228,7 +269,7 @@ export default function MemberDashboard() {
                   <div className="mt-1 space-y-1">
                     <p className="text-sm text-muted-foreground flex items-center gap-2">
                       <MapPin className="h-4 w-4" />
-                      {currentSession.facility} • {currentSession.clubName}
+                      {currentSession.facility}
                     </p>
                     <p className="text-sm font-medium text-emerald-600">
                       Session time: {getElapsedTime()}
@@ -291,91 +332,81 @@ export default function MemberDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Attendance */}
+        {/* Recent Payments */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent Visits</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => navigate('/member/attendance')}>
+            <CardTitle>Recent Payments</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => navigate('/member/payments')}>
               View All
             </Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {recentAttendance.length > 0 ? (
-                recentAttendance.map((record) => (
+              {recentPayments.length > 0 ? (
+                recentPayments.map((payment) => (
                   <div
-                    key={record.id}
+                    key={payment._id || payment.id}
                     className="flex items-center gap-4 p-4 rounded-lg border hover:border-emerald-600 transition-colors"
                   >
                     <div className="p-2 rounded-full bg-emerald-100 dark:bg-emerald-900">
-                      <Fingerprint className="h-5 w-5 text-emerald-600" />
+                      <Calendar className="h-5 w-5 text-emerald-600" />
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-semibold">{record.facility}</h4>
+                      <h4 className="font-semibold">{payment.description || payment.type}</h4>
                       <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {new Date(record.date).toLocaleDateString()}
+                          {new Date(payment.createdAt || payment.date).toLocaleDateString()}
                         </span>
                         <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {record.duration} min
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {record.clubName}
+                          ${payment.amount}
                         </span>
                       </div>
                     </div>
-                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
-                      Verified
+                    <Badge variant="secondary" className={
+                      payment.status === 'paid' || payment.status === 'completed'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                    }>
+                      {payment.status}
                     </Badge>
                   </div>
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
                   <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No visits yet</p>
-                  <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700" onClick={handlePunchIn}>
-                    Punch In Now
-                  </Button>
+                  <p>No recent payments</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Recent Notifications */}
+        {/* Quick Stats */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle>Quick Info</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {mockNotifications.slice(0, 4).map((notification) => (
-                <div
-                  key={notification.id}
-                  className="flex gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 p-2 rounded-lg transition-colors"
-                  onClick={() => {
-                    if (notification.actionUrl) {
-                      navigate(notification.actionUrl);
-                    }
-                  }}
-                >
-                  <div className={`h-2 w-2 rounded-full mt-2 flex-shrink-0 ${notification.type === 'success' ? 'bg-green-500' :
-                    notification.type === 'warning' ? 'bg-amber-500' :
-                      notification.type === 'error' ? 'bg-red-500' :
-                        'bg-blue-500'
-                    }`} />
-                  <div className="flex-1">
-                    <p className="text-sm font-medium">{notification.title}</p>
-                    <p className="text-xs text-muted-foreground">{notification.message}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(notification.timestamp).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
+              <div className="p-3 rounded-lg border">
+                <p className="text-sm font-medium">Member Since</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {member?.createdAt ? new Date(member.createdAt).toLocaleDateString() : 'N/A'}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg border">
+                <p className="text-sm font-medium">Email</p>
+                <p className="text-xs text-muted-foreground mt-1">{member?.email || user?.email}</p>
+              </div>
+              <div className="p-3 rounded-lg border">
+                <p className="text-sm font-medium">Phone</p>
+                <p className="text-xs text-muted-foreground mt-1">{member?.phone || user?.phone || 'N/A'}</p>
+              </div>
+              <div className="p-3 rounded-lg border">
+                <p className="text-sm font-medium">Status</p>
+                <Badge className="mt-1 bg-emerald-500">{member?.status || 'active'}</Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -388,29 +419,34 @@ export default function MemberDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {mockFacilities.slice(0, 4).map((facility) => (
-              <div
-                key={facility.id}
-                className="rounded-lg border overflow-hidden card-hover cursor-pointer"
-                onClick={() => navigate('/member/facilities')}
-              >
-                <img
-                  src={facility.imageUrl || 'https://mgx-backend-cdn.metadl.com/generate/images/924660/2026-01-22/36f0a43c-5afe-42bf-8fef-68eef36ee9ec.png'}
-                  alt={facility.name}
-                  className="w-full h-32 object-cover"
-                />
-                <div className="p-3">
-                  <h4 className="font-semibold text-sm">{facility.name}</h4>
-                  <p className="text-xs text-muted-foreground mt-1">{facility.type}</p>
-                  <div className="flex items-center justify-between mt-2">
-                    <Badge variant="secondary" className="text-xs">
-                      {facility.status}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">{facility.capacity} capacity</span>
+            {facilities.length > 0 ? (
+              facilities.slice(0, 4).map((facility) => (
+                <div
+                  key={facility._id || facility.id}
+                  className="rounded-lg border overflow-hidden card-hover cursor-pointer"
+                  onClick={() => navigate('/member/facilities')}
+                >
+                  <div className="w-full h-32 bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center">
+                    <Building className="h-10 w-10 text-white" />
+                  </div>
+                  <div className="p-3">
+                    <h4 className="font-semibold text-sm">{facility.name}</h4>
+                    <p className="text-xs text-muted-foreground mt-1">{facility.type}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <Badge variant="secondary" className="text-xs">
+                        {facility.status}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{facility.capacity} capacity</span>
+                    </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="col-span-4 text-center py-8 text-muted-foreground">
+                <Building className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No facilities available</p>
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>
@@ -579,8 +615,8 @@ export default function MemberDashboard() {
                 onChange={(e) => setSelectedFacility(e.target.value)}
               >
                 <option value="">Choose a facility...</option>
-                {mockFacilities.map((facility) => (
-                  <option key={facility.id} value={facility.name}>
+                {facilities.map((facility) => (
+                  <option key={facility._id || facility.id} value={facility.name}>
                     {facility.name} - {facility.type}
                   </option>
                 ))}
